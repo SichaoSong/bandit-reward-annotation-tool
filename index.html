@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bandit Reward Annotation Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Bandit Project 2026</p>
+          <h1>Reward Annotation</h1>
+        </div>
+        <div class="topbar-status" id="topbarStatus">動画未選択</div>
+      </header>
+
+      <main class="layout">
+        <aside class="side-column left-column" aria-label="Setup">
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>動画</h2>
+              <span id="sourceStatus">0本</span>
+            </div>
+
+            <div class="segmented" role="tablist" aria-label="Video source">
+              <button class="segment is-active" type="button" data-source-tab="local">Local</button>
+              <button class="segment" type="button" data-source-tab="drive">Drive</button>
+            </div>
+
+            <div class="load-mode">
+              <span>読み込み方法</span>
+              <div class="segmented compact" role="group" aria-label="Load mode">
+                <button class="segment is-active" type="button" data-load-mode="replace">置換</button>
+                <button class="segment" type="button" data-load-mode="append">追加</button>
+              </div>
+            </div>
+
+            <div class="source-pane" id="localPane">
+              <label class="file-picker">
+                <input id="videoFiles" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" multiple />
+                <span>動画ファイルを選択</span>
+              </label>
+              <label class="file-picker">
+                <input id="videoFolder" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" webkitdirectory multiple />
+                <span>フォルダーを選択</span>
+              </label>
+            </div>
+
+            <div class="source-pane" id="drivePane" hidden>
+              <label class="input-label" for="driveLinks">Google Driveリンク</label>
+              <textarea id="driveLinks" rows="6" placeholder="https://drive.google.com/file/d/..."></textarea>
+              <div class="drive-auth-box">
+                <label class="input-label" for="googleClientId">Google OAuth Client ID</label>
+                <input id="googleClientId" type="text" autocomplete="off" placeholder="...apps.googleusercontent.com" />
+                <button class="secondary-button" type="button" id="googleAuthButton">Googleログイン</button>
+                <p class="helper-text" id="googleAuthStatus">Private DriveはClient ID設定後に利用できます</p>
+              </div>
+              <button class="secondary-button" type="button" id="loadDriveLinks">リンクを読み込み</button>
+            </div>
+
+            <button class="secondary-button" type="button" id="clearVideosButton">今の動画をやめる</button>
+          </section>
+
+          <section class="panel instruction-panel">
+            <div class="panel-heading">
+              <h2>作業指示</h2>
+              <span>常時表示</span>
+            </div>
+            <textarea id="instructionText" rows="9">この動画を見て、すごく良いインタラクションと思ったかどうかを1〜7で採点してください。また、具体的になぜそう思ったかを30文字以上で理由を書いてください。</textarea>
+          </section>
+        </aside>
+
+        <section class="workspace" aria-label="Annotation workspace">
+          <div class="video-stage">
+            <video id="videoPlayer" controls playsinline preload="metadata"></video>
+            <div class="empty-state" id="emptyState">
+              <strong id="emptyStateTitle">動画を読み込んでください</strong>
+            </div>
+            <div class="video-error" id="videoError" hidden>
+              <strong>再生できません</strong>
+              <span id="videoErrorText">共有設定または動画URLを確認してください。</span>
+            </div>
+          </div>
+
+          <div class="playback-controls" aria-label="Playback controls">
+            <button class="secondary-button" type="button" id="rewindButton" disabled>-10s</button>
+            <button class="secondary-button" type="button" id="playPauseButton" disabled>再生</button>
+            <button class="secondary-button" type="button" id="forwardButton" disabled>+10s</button>
+            <label class="select-control" for="playbackRate">
+              <span>速度</span>
+              <select id="playbackRate" disabled>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1" selected>1x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+              </select>
+            </label>
+            <span class="time-status" id="timeStatus">0:00 / 0:00</span>
+          </div>
+
+          <div class="video-meta">
+            <div class="video-title-block">
+              <span class="eyebrow">Now</span>
+              <strong id="currentTitle">未選択</strong>
+              <small id="currentSource">-</small>
+            </div>
+            <div class="counter-pill" id="videoCounter">0 / 0</div>
+          </div>
+
+          <section class="annotation-panel">
+            <div class="rating-heading">
+              <h2>採点</h2>
+              <span id="ratingStatus">未選択</span>
+            </div>
+
+            <div class="rating-group" id="ratingGroup" role="radiogroup" aria-label="1から7の採点"></div>
+
+            <div class="reason-field">
+              <label class="input-label" for="reasonText">理由</label>
+              <textarea id="reasonText" rows="6" maxlength="1200" placeholder="30文字以上"></textarea>
+              <div class="reason-meta">
+                <span id="charCount">0 / 30</span>
+                <span id="validationMessage">採点と理由が必要です</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="actions">
+            <button class="secondary-button" type="button" id="previousButton" disabled>前へ</button>
+            <button class="secondary-button" type="button" id="saveButton" disabled>保存</button>
+            <button class="primary-button" type="button" id="nextButton" disabled>次へ</button>
+          </div>
+        </section>
+
+        <aside class="side-column right-column" aria-label="Queue and export">
+          <section class="panel queue-panel">
+            <div class="panel-heading">
+              <h2>キュー</h2>
+              <span id="progressStatus">0 / 0完了</span>
+            </div>
+            <ol class="queue-list" id="queueList"></ol>
+          </section>
+
+          <section class="panel export-panel">
+            <div class="panel-heading">
+              <h2>保存</h2>
+              <span id="saveStatus">未保存</span>
+            </div>
+            <p class="save-file-name" id="saveFileName">動画を読み込むとCSV名が決まります</p>
+            <p class="helper-text">保存でCSV出力、次へはブラウザ内に記録します</p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
