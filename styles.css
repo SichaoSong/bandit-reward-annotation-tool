@@ -85,7 +85,8 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 18px 24px;
+  min-height: 60px;
+  padding: 10px 20px;
   background: #18212f;
   color: #fff;
 }
@@ -98,13 +99,13 @@ button:focus-visible {
 }
 
 .topbar h1 {
-  font-size: 24px;
+  font-size: 21px;
   line-height: 1.1;
 }
 
 .eyebrow {
   display: block;
-  margin: 0 0 5px;
+  margin: 0 0 3px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -130,8 +131,9 @@ button:focus-visible {
 .layout {
   display: grid;
   grid-template-columns: minmax(250px, 320px) minmax(420px, 1fr) minmax(250px, 310px);
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  min-height: calc(100vh - 60px);
+  padding: 12px;
 }
 
 .side-column,
@@ -142,13 +144,14 @@ button:focus-visible {
 .side-column {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .workspace {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .panel,
@@ -160,7 +163,7 @@ button:focus-visible {
 }
 
 .panel {
-  padding: 14px;
+  padding: 12px;
 }
 
 .panel-heading,
@@ -169,7 +172,7 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .panel-heading h2,
@@ -280,12 +283,14 @@ button:focus-visible {
 }
 
 .instruction-panel textarea {
-  min-height: 200px;
+  min-height: 150px;
+  max-height: 26vh;
 }
 
 .video-stage {
   position: relative;
   width: 100%;
+  max-height: min(44vh, 460px);
   overflow: hidden;
   border-radius: var(--radius);
   background: #05070a;
@@ -326,10 +331,10 @@ button:focus-visible {
   grid-template-columns: 78px 78px 78px minmax(130px, 170px) 1fr;
   align-items: center;
   gap: 8px;
-  min-height: 56px;
+  min-height: 48px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 8px;
+  padding: 6px 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -364,8 +369,8 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 68px;
-  padding: 12px 14px;
+  min-height: 52px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -379,7 +384,7 @@ button:focus-visible {
 .video-title-block strong {
   display: block;
   overflow: hidden;
-  font-size: 18px;
+  font-size: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -387,30 +392,29 @@ button:focus-visible {
 .counter-pill {
   flex: 0 0 auto;
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   color: #fff;
   background: var(--coral);
   font-weight: 800;
 }
 
 .annotation-panel {
-  padding: 16px;
+  padding: 12px;
 }
 
 .rating-group {
   display: grid;
   grid-template-columns: repeat(7, minmax(42px, 1fr));
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .rating-button {
-  aspect-ratio: 1 / 1;
-  min-height: 46px;
+  min-height: 40px;
   color: var(--ink);
   background: #edf2f5;
   border: 1px solid transparent;
-  font-size: 18px;
+  font-size: 17px;
 }
 
 .rating-button:hover {
@@ -423,7 +427,8 @@ button:focus-visible {
 }
 
 .reason-field textarea {
-  min-height: 126px;
+  min-height: 88px;
+  max-height: 18vh;
 }
 
 .reason-meta {
@@ -444,7 +449,7 @@ button:focus-visible {
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr 1.2fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .primary-button {
@@ -475,13 +480,14 @@ button:focus-visible {
 }
 
 .queue-panel {
-  min-height: 360px;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .queue-list {
   display: grid;
   gap: 8px;
-  max-height: 56vh;
+  max-height: calc(100vh - 250px);
   margin: 0;
   padding: 0;
   overflow: auto;
@@ -564,6 +570,10 @@ button:focus-visible {
     grid-template-columns: minmax(250px, 310px) minmax(420px, 1fr);
   }
 
+  .video-stage {
+    max-height: min(40vh, 380px);
+  }
+
   .right-column {
     grid-column: 1 / -1;
     display: grid;
@@ -579,6 +589,7 @@ button:focus-visible {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    min-height: auto;
   }
 
   .topbar-status {
@@ -588,6 +599,14 @@ button:focus-visible {
   .layout,
   .right-column {
     grid-template-columns: 1fr;
+  }
+
+  .layout {
+    min-height: auto;
+  }
+
+  .video-stage {
+    max-height: none;
   }
 
   .rating-group {
