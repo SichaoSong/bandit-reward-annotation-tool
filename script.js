@@ -220,7 +220,7 @@ function addVideos(videos) {
   }
 
   const existingIds = new Set(state.videos.map((video) => video.id));
-  const uniqueVideos = videos.filter((video) => !existingIds.has(video.id));
+  const uniqueVideos = shuffleVideos(videos.filter((video) => !existingIds.has(video.id)));
 
   state.videos.push(...uniqueVideos);
 
@@ -229,6 +229,27 @@ function addVideos(videos) {
   }
 
   render();
+}
+
+function shuffleVideos(videos) {
+  const shuffled = [...videos];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
+function randomInt(maxExclusive) {
+  if (window.crypto?.getRandomValues) {
+    const values = new Uint32Array(1);
+    window.crypto.getRandomValues(values);
+    return values[0] % maxExclusive;
+  }
+
+  return Math.floor(Math.random() * maxExclusive);
 }
 
 function configureCsvForVideos(videos) {
@@ -776,6 +797,7 @@ function idbTransactionDone(tx) {
 function createCsv() {
   const headers = [
     "annotated_at",
+    "presentation_order",
     "video_id",
     "video_name",
     "source",
@@ -784,7 +806,18 @@ function createCsv() {
     "instruction",
   ];
   const annotations = state.videos
-    .map((video) => state.annotations[video.id])
+    .map((video, index) => {
+      const annotation = state.annotations[video.id];
+
+      if (!annotation) {
+        return null;
+      }
+
+      return {
+        ...annotation,
+        presentation_order: index + 1,
+      };
+    })
     .filter(Boolean);
   const rows = annotations.map((annotation) =>
     headers.map((header) => csvCell(annotation[header])).join(","),
