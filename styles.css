@@ -58,6 +58,12 @@ textarea {
   line-height: 1.55;
 }
 
+textarea[readonly] {
+  resize: none;
+  color: #334155;
+  background: #f8fbfc;
+}
+
 input,
 select {
   width: 100%;
@@ -252,6 +258,14 @@ button:focus-visible {
 }
 
 .file-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hidden-file-input {
   position: absolute;
   width: 1px;
   height: 1px;

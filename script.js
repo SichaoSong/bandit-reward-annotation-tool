@@ -41,6 +41,7 @@ function cacheElements() {
     localPane: document.getElementById("localPane"),
     drivePane: document.getElementById("drivePane"),
     videoFiles: document.getElementById("videoFiles"),
+    folderPickerButton: document.getElementById("folderPickerButton"),
     videoFolder: document.getElementById("videoFolder"),
     clearVideosButton: document.getElementById("clearVideosButton"),
     driveLinks: document.getElementById("driveLinks"),
@@ -87,15 +88,13 @@ function bindEvents() {
 
   els.videoFiles.addEventListener("change", (event) => addLocalFiles(event.target.files));
   els.videoFolder.addEventListener("change", (event) => addLocalFiles(event.target.files));
+  els.folderPickerButton.addEventListener("click", chooseLocalFolder);
   els.clearVideosButton.addEventListener("click", clearCurrentVideos);
   els.loadDriveLinks.addEventListener("click", addDriveLinks);
   els.googleAuthButton.addEventListener("click", connectGoogleDrive);
   els.reasonText.addEventListener("input", () => {
     state.dirty = true;
     renderValidation();
-  });
-  els.instructionText.addEventListener("input", () => {
-    state.dirty = true;
   });
   els.previousButton.addEventListener("click", () => moveToIndex(state.currentIndex - 1));
   els.saveButton.addEventListener("click", saveButtonHandler);
@@ -155,9 +154,54 @@ function selectRating(value) {
 }
 
 function addLocalFiles(fileList) {
-  const files = Array.from(fileList || []).filter(isVideoFile);
-  const videos = files.map((file) => {
-    const path = file.webkitRelativePath || file.name;
+  const fileItems = Array.from(fileList || [])
+    .map((file) => ({ file, path: file.webkitRelativePath || file.name }))
+    .filter(({ file }) => isVideoFile(file));
+
+  addLocalFileItems(fileItems);
+  els.videoFiles.value = "";
+  els.videoFolder.value = "";
+}
+
+async function chooseLocalFolder() {
+  if (!window.showDirectoryPicker || !window.isSecureContext) {
+    els.videoFolder.click();
+    return;
+  }
+
+  try {
+    const directoryHandle = await window.showDirectoryPicker({ mode: "read" });
+    const fileItems = await collectVideoFileItems(directoryHandle, directoryHandle.name);
+    addLocalFileItems(fileItems);
+  } catch (error) {
+    if (!isAbortError(error)) {
+      els.saveStatus.textContent = "フォルダーを読み込めませんでした";
+    }
+  }
+}
+
+async function collectVideoFileItems(directoryHandle, prefix) {
+  const items = [];
+
+  for await (const [name, handle] of directoryHandle.entries()) {
+    const path = `${prefix}/${name}`;
+
+    if (handle.kind === "file") {
+      const file = await handle.getFile();
+
+      if (isVideoFile(file)) {
+        items.push({ file, path });
+      }
+    } else if (handle.kind === "directory") {
+      items.push(...(await collectVideoFileItems(handle, path)));
+    }
+  }
+
+  return items;
+}
+
+function addLocalFileItems(fileItems) {
+  const videos = fileItems.sort(compareFileItemsByPath).map(({ file, path }) => {
     const src = URL.createObjectURL(file);
     return {
       id: `local:${path}:${file.size}:${file.lastModified}`,
@@ -171,8 +215,6 @@ function addLocalFiles(fileList) {
   });
 
   addVideos(videos);
-  els.videoFiles.value = "";
-  els.videoFolder.value = "";
 }
 
 async function addDriveLinks() {
@@ -220,7 +262,7 @@ function addVideos(videos) {
   }
 
   const existingIds = new Set(state.videos.map((video) => video.id));
-  const uniqueVideos = shuffleVideos(videos.filter((video) => !existingIds.has(video.id)));
+  const uniqueVideos = orderVideosForQueue(videos.filter((video) => !existingIds.has(video.id)));
 
   state.videos.push(...uniqueVideos);
 
@@ -231,25 +273,57 @@ function addVideos(videos) {
   render();
 }
 
-function shuffleVideos(videos) {
+function orderVideosForQueue(videos) {
+  const sorted = [...videos].sort(compareVideosById);
+
+  if (sorted.length <= 1) {
+    return sorted;
+  }
+
+  const seed = hashString(sorted.map((video) => video.videoId).join("\n"));
+  return seededShuffle(sorted, seed);
+}
+
+function seededShuffle(videos, seed) {
   const shuffled = [...videos];
+  let currentSeed = seed || 1;
 
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = randomInt(index + 1);
+    currentSeed = nextSeed(currentSeed);
+    const swapIndex = currentSeed % (index + 1);
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
 
   return shuffled;
 }
 
-function randomInt(maxExclusive) {
-  if (window.crypto?.getRandomValues) {
-    const values = new Uint32Array(1);
-    window.crypto.getRandomValues(values);
-    return values[0] % maxExclusive;
+function compareFileItemsByPath(a, b) {
+  return a.path.localeCompare(b.path, "ja", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function compareVideosById(a, b) {
+  return String(a.videoId).localeCompare(String(b.videoId), "ja", {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
 
-  return Math.floor(Math.random() * maxExclusive);
+  return hash >>> 0;
+}
+
+function nextSeed(seed) {
+  return (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 }
 
 function configureCsvForVideos(videos) {
@@ -447,12 +521,16 @@ async function setCurrentIndex(index, autoplay) {
 }
 
 async function moveToIndex(index) {
-  if (state.dirty && !canSaveCurrent()) {
+  if (index === state.currentIndex) {
+    return;
+  }
+
+  if (getCurrentVideo() && !canSaveCurrent()) {
     renderValidation(true);
     return;
   }
 
-  if (state.dirty && canSaveCurrent()) {
+  if (getCurrentVideo() && canSaveCurrent()) {
     await saveCurrentAnnotation({ syncCsv: false });
   }
 
@@ -485,7 +563,9 @@ async function nextButtonHandler() {
     return;
   }
 
-  els.saveStatus.textContent = state.csvDirty ? "完了・CSV未保存" : "完了";
+  const savedCsv = await syncCsvAfterAnnotation({ allowPicker: true, allowDownload: true });
+  state.csvDirty = !savedCsv;
+  els.saveStatus.textContent = savedCsv ? "完了・CSV保存済み" : "完了・CSV未保存";
   render();
 }
 
@@ -511,8 +591,8 @@ async function saveCurrentAnnotation({ syncCsv }) {
   persistAnnotations();
 
   if (syncCsv) {
-    await syncCsvAfterAnnotation({ allowPicker: true, allowDownload: true });
-    state.csvDirty = false;
+    const savedCsv = await syncCsvAfterAnnotation({ allowPicker: true, allowDownload: true });
+    state.csvDirty = !savedCsv;
   } else {
     state.csvDirty = true;
     els.saveStatus.textContent = "ブラウザ保存済み・CSV未保存";
@@ -593,16 +673,28 @@ async function syncCsvAfterAnnotation({ allowPicker, allowDownload }) {
       if (handle) {
         await writeCsvToHandle(handle);
         els.saveStatus.textContent = "CSV保存済み";
-        return;
+        return true;
       }
     } catch (error) {
       state.csvHandle = null;
+
+      if (isAbortError(error)) {
+        els.saveStatus.textContent = "CSV保存キャンセル・ブラウザ内には保存済み";
+        return false;
+      }
     }
   }
 
   if (allowDownload) {
     downloadCsv("CSVをDownloadsに保存しました");
+    return true;
   }
+
+  return false;
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
 }
 
 async function ensureCsvHandle({ allowPicker }) {
@@ -836,6 +928,7 @@ function render() {
   const completedCount = state.videos.filter((video) => state.annotations[video.id]).length;
   const totalCount = state.videos.length;
   const canControlVideo = Boolean(currentVideo) && !state.isVideoLoading;
+  const canLeaveCurrentVideo = !currentVideo || canSaveCurrent();
 
   els.sourceStatus.textContent = `${totalCount}本`;
   els.progressStatus.textContent = `${completedCount} / ${totalCount}完了`;
@@ -843,7 +936,7 @@ function render() {
   els.saveFileName.textContent = totalCount > 0
     ? state.csvFileName
     : "動画を読み込むとCSV名が決まります";
-  els.previousButton.disabled = state.currentIndex <= 0;
+  els.previousButton.disabled = state.currentIndex <= 0 || !canLeaveCurrentVideo;
   els.rewindButton.disabled = !canControlVideo;
   els.playPauseButton.disabled = !canControlVideo;
   els.forwardButton.disabled = !canControlVideo;

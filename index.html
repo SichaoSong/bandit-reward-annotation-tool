@@ -40,12 +40,11 @@
             <div class="source-pane" id="localPane">
               <label class="file-picker">
                 <input id="videoFiles" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" multiple />
-                <span>動画ファイルを選択</span>
+                <span>動画ファイルを読み込む</span>
               </label>
-              <label class="file-picker">
-                <input id="videoFolder" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" webkitdirectory multiple />
-                <span>フォルダーを選択</span>
-              </label>
+              <button class="file-picker" type="button" id="folderPickerButton">フォルダーを読み込む</button>
+              <input class="hidden-file-input" id="videoFolder" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" webkitdirectory multiple />
+              <p class="helper-text">動画はこのブラウザ内で処理され、サーバーへアップロードされません。フォルダー選択時はブラウザ確認が表示されることがあります。</p>
             </div>
 
             <div class="source-pane" id="drivePane" hidden>
@@ -60,7 +59,7 @@
               <button class="secondary-button" type="button" id="loadDriveLinks">リンクを読み込み</button>
             </div>
 
-            <button class="secondary-button" type="button" id="clearVideosButton">今の動画をやめる</button>
+            <button class="secondary-button" type="button" id="clearVideosButton">キューから全動画を削除する</button>
           </section>
 
           <section class="panel instruction-panel">
@@ -68,7 +67,7 @@
               <h2>作業指示</h2>
               <span>常時表示</span>
             </div>
-            <textarea id="instructionText" rows="9">この動画を見て、すごく良いインタラクションと思ったかどうかを1〜7で採点してください。また、具体的になぜそう思ったかを30文字以上で理由を書いてください。</textarea>
+            <textarea id="instructionText" rows="9" readonly aria-readonly="true">この動画を見て、すごく良いインタラクションと思ったかどうかを1〜7で採点してください。また、具体的になぜそう思ったかを30文字以上で理由を書いてください。</textarea>
           </section>
         </aside>
 
