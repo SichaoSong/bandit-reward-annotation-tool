@@ -445,6 +445,15 @@ button:focus-visible {
   max-height: 18vh;
 }
 
+.memo-field {
+  margin-top: 10px;
+}
+
+.memo-field textarea {
+  min-height: 64px;
+  max-height: 14vh;
+}
+
 .reason-meta {
   display: flex;
   justify-content: space-between;

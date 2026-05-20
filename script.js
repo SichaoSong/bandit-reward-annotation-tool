@@ -66,6 +66,7 @@ function cacheElements() {
     ratingGroup: document.getElementById("ratingGroup"),
     ratingStatus: document.getElementById("ratingStatus"),
     reasonText: document.getElementById("reasonText"),
+    memoText: document.getElementById("memoText"),
     charCount: document.getElementById("charCount"),
     validationMessage: document.getElementById("validationMessage"),
     previousButton: document.getElementById("previousButton"),
@@ -95,6 +96,9 @@ function bindEvents() {
   els.reasonText.addEventListener("input", () => {
     state.dirty = true;
     renderValidation();
+  });
+  els.memoText.addEventListener("input", () => {
+    state.dirty = true;
   });
   els.previousButton.addEventListener("click", () => moveToIndex(state.currentIndex - 1));
   els.saveButton.addEventListener("click", saveButtonHandler);
@@ -407,6 +411,7 @@ function clearVideoQueue() {
   state.datasetName = "bandit_annotations";
   state.csvFileName = "bandit_annotations.csv";
   els.reasonText.value = "";
+  els.memoText.value = "";
   els.videoError.hidden = true;
   els.emptyStateTitle.textContent = "動画を読み込んでください";
   els.videoPlayer.pause();
@@ -482,6 +487,7 @@ async function setCurrentIndex(index, autoplay) {
 
   state.selectedRating = annotation?.rating || null;
   els.reasonText.value = annotation?.reason || "";
+  els.memoText.value = annotation?.memo || "";
   state.dirty = false;
 
   els.videoError.hidden = true;
@@ -582,6 +588,7 @@ async function saveCurrentAnnotation({ syncCsv }) {
     source: video.source,
     rating: state.selectedRating,
     reason: els.reasonText.value.trim(),
+    memo: els.memoText.value.trim(),
     instruction: els.instructionText.value.trim(),
     annotated_at: new Date().toISOString(),
   };
@@ -895,6 +902,7 @@ function createCsv() {
     "source",
     "rating",
     "reason",
+    "memo",
     "instruction",
   ];
   const annotations = state.videos
