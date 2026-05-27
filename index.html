@@ -67,7 +67,27 @@
               <h2>作業指示</h2>
               <span>常時表示</span>
             </div>
-            <textarea id="instructionText" rows="9" readonly aria-readonly="true">この動画を見て、すごく良いインタラクションと思ったかどうかを1〜7で採点してください。また、具体的になぜそう思ったかを30文字以上で理由を書いてください。</textarea>
+            <textarea id="instructionText" rows="12" readonly aria-readonly="true">→ 採点
+動画中でロボットが行ったインタラクションについて、ユーザ視点で良いインタラクションと思ったかどうか（1~7点の7段階、スコアが高いほど良い）
+
+→ 理由
+採点理由を具体的に説明してください（50文字以上）。採点理由には「どのようなインタラクションが発生し、それがユーザ視点でなぜ良い／悪いと思ったのか」を含めてください。
+
+OK例
+子供が飽きないように、子供の興味を引く単語を使ったり声色を変えたりしていたのが、親としてはありがたい
+ロボットの返答が長く、途中でユーザが聞き返したのに無視して話し続けていたのは印象が悪い
+周囲に人が多くユーザが短く済ませたそうだったが、ロボットの説明が詳しすぎて長かったため、情報量が状況に合っていなかった
+
+NG例
+自然だった
+微妙だった
+
+→ 評価の可否（メモ欄）
+問題なく評価できたかどうか（任意、フリーテキスト）
+
+問題ありの例
+音声が聞こえない
+動画が壊れている</textarea>
           </section>
         </aside>
 
@@ -122,16 +142,16 @@
 
             <div class="reason-field">
               <label class="input-label" for="reasonText">理由</label>
-              <textarea id="reasonText" rows="6" maxlength="1200" placeholder="30文字以上"></textarea>
+              <textarea id="reasonText" rows="6" maxlength="1200" placeholder="50文字以上"></textarea>
               <div class="reason-meta">
-                <span id="charCount">0 / 30</span>
+                <span id="charCount">0 / 50</span>
                 <span id="validationMessage">採点と理由が必要です</span>
               </div>
             </div>
 
             <div class="memo-field">
-              <label class="input-label" for="memoText">メモ</label>
-              <textarea id="memoText" rows="3" maxlength="1200" placeholder="任意: この動画について残したいメモ"></textarea>
+              <label class="input-label" for="memoText">評価の可否メモ</label>
+              <textarea id="memoText" rows="3" maxlength="1200" placeholder="任意: 問題なく評価できたか、音声が聞こえない/動画が壊れている等"></textarea>
             </div>
           </section>
 

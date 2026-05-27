@@ -1,4 +1,4 @@
-const MIN_REASON_LENGTH = 30;
+const MIN_REASON_LENGTH = 50;
 const STORAGE_KEY = "bandit-reward-annotations-v1";
 const CSV_HANDLE_DB = "bandit-reward-csv-handles-v1";
 const CSV_HANDLE_STORE = "handles";
@@ -9,6 +9,7 @@ const state = {
   videos: [],
   currentIndex: -1,
   annotations: loadAnnotations(),
+  drafts: {},
   selectedRating: null,
   dirty: false,
   csvDirty: false,
@@ -403,6 +404,7 @@ function clearVideoQueue() {
   state.videos = [];
   state.currentIndex = -1;
   state.selectedRating = null;
+  state.drafts = {};
   state.dirty = false;
   state.csvDirty = false;
   state.isVideoLoading = false;
@@ -430,11 +432,15 @@ function revokeVideoSource(video) {
 }
 
 function confirmAbandonDirtyWork() {
-  if (!state.dirty) {
+  if (!state.dirty && !hasDrafts()) {
     return true;
   }
 
   return window.confirm("未保存の入力があります。この動画セットを切り替えますか？");
+}
+
+function hasDrafts() {
+  return Object.keys(state.drafts).length > 0;
 }
 
 async function resolveVideoSrc(video) {
@@ -483,12 +489,12 @@ async function setCurrentIndex(index, autoplay) {
   state.isVideoLoading = true;
   const video = getCurrentVideo();
   state.loadingVideoId = video.id;
-  const annotation = state.annotations[video.id];
+  const annotation = state.drafts[video.id] || state.annotations[video.id];
 
   state.selectedRating = annotation?.rating || null;
   els.reasonText.value = annotation?.reason || "";
   els.memoText.value = annotation?.memo || "";
-  state.dirty = false;
+  state.dirty = Boolean(state.drafts[video.id]);
 
   els.videoError.hidden = true;
   els.emptyStateTitle.textContent = video.authFileId ? "Drive動画を読み込み中" : "動画を読み込み中";
@@ -531,13 +537,22 @@ async function moveToIndex(index) {
     return;
   }
 
-  if (getCurrentVideo() && !canSaveCurrent()) {
+  if (index < 0 || index >= state.videos.length) {
+    return;
+  }
+
+  const currentVideo = getCurrentVideo();
+  const isMovingBackward = index < state.currentIndex;
+
+  if (currentVideo && !isMovingBackward && !canSaveCurrent()) {
     renderValidation(true);
     return;
   }
 
-  if (getCurrentVideo() && canSaveCurrent()) {
+  if (currentVideo && canSaveCurrent()) {
     await saveCurrentAnnotation({ syncCsv: false });
+  } else if (currentVideo) {
+    saveCurrentDraft();
   }
 
   await setCurrentIndex(index, false);
@@ -569,7 +584,7 @@ async function nextButtonHandler() {
     return;
   }
 
-  const savedCsv = await syncCsvAfterAnnotation({ allowPicker: true, allowDownload: true });
+  const savedCsv = await syncCsvOnCompletion();
   state.csvDirty = !savedCsv;
   els.saveStatus.textContent = savedCsv ? "完了・CSV保存済み" : "完了・CSV未保存";
   render();
@@ -594,6 +609,7 @@ async function saveCurrentAnnotation({ syncCsv }) {
   };
 
   state.annotations[video.id] = annotation;
+  delete state.drafts[video.id];
   state.dirty = false;
   persistAnnotations();
 
@@ -606,6 +622,31 @@ async function saveCurrentAnnotation({ syncCsv }) {
   }
 
   render();
+}
+
+function saveCurrentDraft() {
+  const video = getCurrentVideo();
+
+  if (!video) {
+    return;
+  }
+
+  const reason = els.reasonText.value;
+  const memo = els.memoText.value;
+  const hasDraft = Boolean(state.selectedRating || reason.trim() || memo.trim());
+
+  if (!hasDraft) {
+    delete state.drafts[video.id];
+    state.dirty = false;
+    return;
+  }
+
+  state.drafts[video.id] = {
+    rating: state.selectedRating,
+    reason,
+    memo,
+  };
+  state.dirty = true;
 }
 
 async function connectGoogleDrive() {
@@ -698,6 +739,25 @@ async function syncCsvAfterAnnotation({ allowPicker, allowDownload }) {
   }
 
   return false;
+}
+
+async function syncCsvOnCompletion() {
+  if (canUseNativeFileSave()) {
+    try {
+      const handle = await ensureCsvHandle({ allowPicker: false });
+
+      if (handle) {
+        await writeCsvToHandle(handle);
+        els.saveStatus.textContent = "完了・CSV保存済み";
+        return true;
+      }
+    } catch {
+      state.csvHandle = null;
+    }
+  }
+
+  downloadCsv("完了・CSVをDownloadsに保存しました");
+  return true;
 }
 
 function isAbortError(error) {
@@ -936,7 +996,6 @@ function render() {
   const completedCount = state.videos.filter((video) => state.annotations[video.id]).length;
   const totalCount = state.videos.length;
   const canControlVideo = Boolean(currentVideo) && !state.isVideoLoading;
-  const canLeaveCurrentVideo = !currentVideo || canSaveCurrent();
 
   els.sourceStatus.textContent = `${totalCount}本`;
   els.progressStatus.textContent = `${completedCount} / ${totalCount}完了`;
@@ -944,7 +1003,7 @@ function render() {
   els.saveFileName.textContent = totalCount > 0
     ? state.csvFileName
     : "動画を読み込むとCSV名が決まります";
-  els.previousButton.disabled = state.currentIndex <= 0 || !canLeaveCurrentVideo;
+  els.previousButton.disabled = state.currentIndex <= 0;
   els.rewindButton.disabled = !canControlVideo;
   els.playPauseButton.disabled = !canControlVideo;
   els.forwardButton.disabled = !canControlVideo;
