@@ -44,7 +44,7 @@
               </label>
               <button class="file-picker" type="button" id="folderPickerButton">フォルダーを読み込む</button>
               <input class="hidden-file-input" id="videoFolder" type="file" webkitdirectory multiple />
-              <p class="helper-text">動画はこのブラウザ内で処理され、サーバーへアップロードされません。フォルダー選択時はブラウザ確認が表示されることがあります。</p>
+              <p class="helper-text">動画はこのブラウザ内で処理され、サーバーへアップロードされません。対応ブラウザでは保存CSVを動画フォルダー内に作成/更新します。</p>
             </div>
 
             <div class="source-pane" id="drivePane" hidden>
@@ -206,7 +206,7 @@ NG例
               <span>CSVから作業再開</span>
             </label>
             <p class="helper-text" id="resumeStatus">フォルダー内に一致するCSVがある場合は自動再開します。別場所のCSVはここから選べます</p>
-            <p class="helper-text">保存でCSV出力、次へはブラウザ内に記録します</p>
+            <p class="helper-text">保存でCSV出力、次へはブラウザ内に記録します。対応ブラウザではフォルダー読み込み時の動画フォルダー内へ保存します</p>
           </section>
         </aside>
       </main>

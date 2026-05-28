@@ -16,6 +16,7 @@ const state = {
   dirty: false,
   csvDirty: false,
   csvHandle: null,
+  csvDirectoryHandle: null,
   csvFileName: "bandit_annotations.csv",
   datasetName: "bandit_annotations",
   loadMode: "replace",
@@ -197,7 +198,7 @@ async function chooseLocalFolder() {
       directoryHandle.name,
     );
     await autoLoadMatchingResumeCsv(csvItems, videoItems);
-    addLocalFileItems(videoItems);
+    addLocalFileItems(videoItems, { directoryHandle });
   } catch (error) {
     if (!isAbortError(error)) {
       els.saveStatus.textContent = "フォルダーを読み込めませんでした";
@@ -233,7 +234,7 @@ async function collectLocalFolderItems(directoryHandle, prefix) {
   return items;
 }
 
-function addLocalFileItems(fileItems) {
+function addLocalFileItems(fileItems, options = {}) {
   const videos = fileItems.sort(compareFileItemsByPath).map(({ file, path }) => {
     const src = URL.createObjectURL(file);
     return {
@@ -247,7 +248,7 @@ function addLocalFileItems(fileItems) {
     };
   });
 
-  addVideos(videos);
+  return addVideos(videos, { csvDirectoryHandle: options.directoryHandle || null });
 }
 
 async function autoLoadMatchingResumeCsv(csvItems, fileItems) {
@@ -338,21 +339,21 @@ async function addDriveLinks() {
   addVideos(videos);
 }
 
-function addVideos(videos) {
+function addVideos(videos, options = {}) {
   if (!videos.length) {
-    return;
+    return false;
   }
 
   if (state.loadMode === "replace") {
     if (!confirmAbandonDirtyWork()) {
       videos.forEach(revokeVideoSource);
-      return;
+      return false;
     }
 
     clearVideoQueue();
-    configureCsvForVideos(videos);
+    configureCsvForVideos(videos, options);
   } else if (!state.videos.length) {
-    configureCsvForVideos(videos);
+    configureCsvForVideos(videos, options);
   }
 
   const existingIds = new Set(state.videos.map((video) => video.id));
@@ -369,6 +370,7 @@ function addVideos(videos) {
   }
 
   render();
+  return true;
 }
 
 async function loadResumeCsv(file) {
@@ -561,11 +563,14 @@ function nextSeed(seed) {
   return (Math.imul(seed, 1664525) + 1013904223) >>> 0;
 }
 
-function configureCsvForVideos(videos) {
+function configureCsvForVideos(videos, options = {}) {
   state.datasetName = deriveDatasetName(videos);
   state.csvFileName = `${sanitizeFileName(state.datasetName)}_annotations.csv`;
   state.csvHandle = null;
-  els.saveStatus.textContent = "CSV準備済み";
+  state.csvDirectoryHandle = options.csvDirectoryHandle || null;
+  els.saveStatus.textContent = state.csvDirectoryHandle
+    ? "動画フォルダー内CSV準備済み"
+    : "CSV準備済み";
   els.saveFileName.textContent = state.csvFileName;
 }
 
@@ -640,6 +645,7 @@ function clearVideoQueue() {
   state.isVideoLoading = false;
   state.loadingVideoId = "";
   state.csvHandle = null;
+  state.csvDirectoryHandle = null;
   state.datasetName = "bandit_annotations";
   state.csvFileName = "bandit_annotations.csv";
   els.reasonText.value = "";
@@ -935,7 +941,7 @@ function loadExternalScript(src) {
 }
 
 function canUseNativeFileSave() {
-  return Boolean(window.showSaveFilePicker && window.isSecureContext);
+  return Boolean(window.isSecureContext && (state.csvDirectoryHandle || window.showSaveFilePicker));
 }
 
 async function syncCsvAfterAnnotation({ allowPicker, allowDownload }) {
@@ -945,7 +951,9 @@ async function syncCsvAfterAnnotation({ allowPicker, allowDownload }) {
 
       if (handle) {
         await writeCsvToHandle(handle);
-        els.saveStatus.textContent = "CSV保存済み";
+        els.saveStatus.textContent = state.csvDirectoryHandle
+          ? "動画フォルダー内CSV保存済み"
+          : "CSV保存済み";
         return true;
       }
     } catch (error) {
@@ -975,6 +983,12 @@ async function ensureCsvHandle({ allowPicker }) {
     return state.csvHandle;
   }
 
+  const folderHandle = await ensureCsvHandleInSelectedDirectory({ allowPicker });
+
+  if (folderHandle) {
+    return folderHandle;
+  }
+
   const storedHandle = await loadStoredCsvHandle(state.csvFileName);
 
   const hasStoredPermission =
@@ -992,16 +1006,41 @@ async function ensureCsvHandle({ allowPicker }) {
     return null;
   }
 
+  if (!window.showSaveFilePicker) {
+    return null;
+  }
+
   const pickedHandle = await showCsvSavePicker();
   state.csvHandle = pickedHandle;
   await storeCsvHandle(state.csvFileName, pickedHandle);
   return state.csvHandle;
 }
 
+async function ensureCsvHandleInSelectedDirectory({ allowPicker }) {
+  if (!state.csvDirectoryHandle) {
+    return null;
+  }
+
+  const hasPermission = allowPicker
+    ? await requestFileWritePermission(state.csvDirectoryHandle)
+    : await hasFileWritePermission(state.csvDirectoryHandle);
+
+  if (!hasPermission) {
+    return null;
+  }
+
+  const fileHandle = await state.csvDirectoryHandle.getFileHandle(state.csvFileName, {
+    create: true,
+  });
+  state.csvHandle = fileHandle;
+  await storeCsvHandle(state.csvFileName, fileHandle);
+  return state.csvHandle;
+}
+
 async function showCsvSavePicker() {
   const pickerOptions = {
     suggestedName: state.csvFileName,
-    startIn: "downloads",
+    startIn: state.csvDirectoryHandle || "downloads",
     types: [
       {
         description: "CSV",
@@ -1031,11 +1070,27 @@ async function requestFileWritePermission(fileHandle) {
     return true;
   }
 
-  return (await fileHandle.requestPermission(options)) === "granted";
+  if (!fileHandle?.requestPermission) {
+    return false;
+  }
+
+  try {
+    return (await fileHandle.requestPermission(options)) === "granted";
+  } catch {
+    return false;
+  }
 }
 
 async function hasFileWritePermission(fileHandle) {
-  return (await fileHandle.queryPermission({ mode: "readwrite" })) === "granted";
+  if (!fileHandle?.queryPermission) {
+    return false;
+  }
+
+  try {
+    return (await fileHandle.queryPermission({ mode: "readwrite" })) === "granted";
+  } catch {
+    return false;
+  }
 }
 
 async function writeCsvToHandle(fileHandle) {
@@ -1098,7 +1153,9 @@ async function attemptExistingCsvSync() {
 
     await writeCsvToHandle(handle);
     state.csvDirty = false;
-    els.saveStatus.textContent = "CSV保存済み";
+    els.saveStatus.textContent = state.csvDirectoryHandle
+      ? "動画フォルダー内CSV保存済み"
+      : "CSV保存済み";
     return true;
   } catch {
     return false;
