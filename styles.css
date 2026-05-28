@@ -270,6 +270,14 @@ button:focus-visible {
   margin: 10px 0 8px;
 }
 
+.resume-start {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 .hidden-file-input {
   position: absolute;
   width: 1px;
@@ -599,6 +607,42 @@ button:focus-visible {
   display: none !important;
 }
 
+.app-shell:not(.is-working) .topbar-status {
+  display: none;
+}
+
+.app-shell:not(.is-working) .layout {
+  grid-template-columns: minmax(320px, 560px);
+  align-content: center;
+  justify-content: center;
+}
+
+.app-shell:not(.is-working) .left-column {
+  width: 100%;
+}
+
+.app-shell:not(.is-working) .setup-panel {
+  padding: 18px;
+}
+
+.app-shell:not(.is-working) .setup-panel .panel-heading {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.app-shell:not(.is-working) .setup-panel .panel-heading h2 {
+  font-size: 20px;
+}
+
+.app-shell:not(.is-working) .setup-panel .panel-heading span,
+.app-shell:not(.is-working) .load-mode,
+.app-shell:not(.is-working) #clearVideosButton,
+.app-shell:not(.is-working) .instruction-panel,
+.app-shell:not(.is-working) .workspace,
+.app-shell:not(.is-working) .right-column {
+  display: none;
+}
+
 .app-shell.is-working {
   height: 100vh;
   overflow: hidden;
@@ -692,7 +736,8 @@ button:focus-visible {
 
 .app-shell.is-working .setup-panel > .segmented,
 .app-shell.is-working .setup-panel .load-mode,
-.app-shell.is-working .setup-panel .source-pane {
+.app-shell.is-working .setup-panel .source-pane,
+.app-shell.is-working .resume-start {
   display: none;
 }
 

@@ -41,6 +41,7 @@ function init() {
 function cacheElements() {
   Object.assign(els, {
     appShell: document.getElementById("appShell"),
+    setupTitle: document.getElementById("setupTitle"),
     topbarStatus: document.getElementById("topbarStatus"),
     sourceStatus: document.getElementById("sourceStatus"),
     localPane: document.getElementById("localPane"),
@@ -49,6 +50,8 @@ function cacheElements() {
     folderPickerButton: document.getElementById("folderPickerButton"),
     videoFolder: document.getElementById("videoFolder"),
     clearVideosButton: document.getElementById("clearVideosButton"),
+    startResumeCsv: document.getElementById("startResumeCsv"),
+    startResumeStatus: document.getElementById("startResumeStatus"),
     driveLinks: document.getElementById("driveLinks"),
     loadDriveLinks: document.getElementById("loadDriveLinks"),
     googleClientId: document.getElementById("googleClientId"),
@@ -98,6 +101,7 @@ function bindEvents() {
   els.videoFolder.addEventListener("change", (event) => addLocalFiles(event.target.files));
   els.folderPickerButton.addEventListener("click", chooseLocalFolder);
   els.clearVideosButton.addEventListener("click", clearCurrentVideos);
+  els.startResumeCsv.addEventListener("change", (event) => loadResumeCsv(event.target.files?.[0]));
   els.resumeCsv.addEventListener("change", (event) => loadResumeCsv(event.target.files?.[0]));
   els.loadDriveLinks.addEventListener("click", addDriveLinks);
   els.googleAuthButton.addEventListener("click", connectGoogleDrive);
@@ -332,6 +336,7 @@ async function loadResumeCsv(file) {
     setResumeStatus(error?.message || "CSVを読み込めませんでした");
   } finally {
     els.resumeCsv.value = "";
+    els.startResumeCsv.value = "";
   }
 }
 
@@ -1229,6 +1234,7 @@ function csvCell(value) {
 
 function setResumeStatus(message) {
   els.resumeStatus.textContent = message;
+  els.startResumeStatus.textContent = message;
 }
 
 function fitInstructionTextHeight() {
@@ -1250,6 +1256,7 @@ function render() {
   const canControlVideo = Boolean(currentVideo) && !state.isVideoLoading;
 
   els.appShell.classList.toggle("is-working", totalCount > 0);
+  els.setupTitle.textContent = totalCount > 0 ? "動画セット" : "動画を読み込む";
   els.sourceStatus.textContent = `${totalCount}本`;
   els.progressStatus.textContent = `${completedCount} / ${totalCount}完了`;
   els.clearVideosButton.disabled = totalCount === 0;

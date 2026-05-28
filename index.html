@@ -20,7 +20,7 @@
         <aside class="side-column left-column" aria-label="Setup">
           <section class="panel setup-panel">
             <div class="panel-heading">
-              <h2>動画</h2>
+              <h2 id="setupTitle">動画を読み込む</h2>
               <span id="sourceStatus">0本</span>
             </div>
 
@@ -57,6 +57,14 @@
                 <p class="helper-text" id="googleAuthStatus">Private DriveはClient ID設定後に利用できます</p>
               </div>
               <button class="secondary-button" type="button" id="loadDriveLinks">リンクを読み込み</button>
+            </div>
+
+            <div class="resume-start">
+              <label class="file-picker resume-picker">
+                <input id="startResumeCsv" type="file" accept=".csv,text/csv" />
+                <span>前回CSVから再開</span>
+              </label>
+              <p class="helper-text" id="startResumeStatus">先にCSVを選んでから同じフォルダーを読み込むこともできます</p>
             </div>
 
             <button class="secondary-button" type="button" id="clearVideosButton">キューから全動画を削除する</button>
