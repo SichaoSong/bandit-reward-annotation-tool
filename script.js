@@ -40,6 +40,7 @@ function init() {
 
 function cacheElements() {
   Object.assign(els, {
+    appShell: document.getElementById("appShell"),
     topbarStatus: document.getElementById("topbarStatus"),
     sourceStatus: document.getElementById("sourceStatus"),
     localPane: document.getElementById("localPane"),
@@ -1248,6 +1249,7 @@ function render() {
   const totalCount = state.videos.length;
   const canControlVideo = Boolean(currentVideo) && !state.isVideoLoading;
 
+  els.appShell.classList.toggle("is-working", totalCount > 0);
   els.sourceStatus.textContent = `${totalCount}本`;
   els.progressStatus.textContent = `${completedCount} / ${totalCount}完了`;
   els.clearVideosButton.disabled = totalCount === 0;
@@ -1272,6 +1274,7 @@ function render() {
     els.emptyStateTitle.textContent = "動画を読み込んでください";
   }
 
+  fitInstructionTextHeight();
   renderRatingState();
   renderValidation();
   renderQueue();

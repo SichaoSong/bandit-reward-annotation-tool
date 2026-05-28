@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell">
       <header class="topbar">
         <div>
           <p class="eyebrow">Bandit Project 2026</p>
@@ -18,7 +18,7 @@
 
       <main class="layout">
         <aside class="side-column left-column" aria-label="Setup">
-          <section class="panel">
+          <section class="panel setup-panel">
             <div class="panel-heading">
               <h2>動画</h2>
               <span id="sourceStatus">0本</span>
@@ -88,6 +88,22 @@ NG例
 問題ありの例
 音声が聞こえない
 動画が壊れている</textarea>
+            <div class="instruction-brief">
+              <div class="instruction-brief-item">
+                <strong>採点</strong>
+                <p>ロボットのインタラクションをユーザ視点で1~7点評価。高いほど良い。</p>
+              </div>
+              <div class="instruction-brief-item">
+                <strong>理由</strong>
+                <p>どのようなインタラクションが発生し、なぜ良い/悪いと思ったかを50文字以上で具体的に記入。</p>
+                <small>OK: 具体的な状況と理由 / NG: 自然だった、微妙だった</small>
+              </div>
+              <div class="instruction-brief-item">
+                <strong>評価の可否メモ</strong>
+                <p>問題がある場合のみ任意で記入。</p>
+                <small>例: 音声が聞こえない / 動画が壊れている</small>
+              </div>
+            </div>
           </section>
         </aside>
 
