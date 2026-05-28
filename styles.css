@@ -302,8 +302,10 @@ button:focus-visible {
 }
 
 .instruction-panel textarea {
-  min-height: 150px;
-  max-height: 26vh;
+  min-height: min-content;
+  max-height: none;
+  overflow: hidden;
+  field-sizing: content;
 }
 
 .video-stage {

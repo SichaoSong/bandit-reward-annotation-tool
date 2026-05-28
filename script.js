@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 function init() {
   cacheElements();
+  fitInstructionTextHeight();
   renderRatingButtons();
   bindEvents();
   render();
@@ -121,6 +122,7 @@ function bindEvents() {
   els.videoPlayer.addEventListener("error", showVideoError);
 
   document.addEventListener("keydown", handleKeyboard);
+  window.addEventListener("resize", fitInstructionTextHeight);
   window.addEventListener("pagehide", handlePageHide);
   window.addEventListener("beforeunload", handleBeforeUnload);
 }
@@ -712,17 +714,12 @@ async function nextButtonHandler() {
     return;
   }
 
-  await saveCurrentAnnotation({ syncCsv: false });
-
-  if (state.currentIndex < state.videos.length - 1) {
-    await setCurrentIndex(state.currentIndex + 1, true);
+  if (state.currentIndex >= state.videos.length - 1) {
     return;
   }
 
-  const savedCsv = await syncCsvOnCompletion();
-  state.csvDirty = !savedCsv;
-  els.saveStatus.textContent = savedCsv ? "完了・CSV保存済み" : "完了・CSV未保存";
-  render();
+  await saveCurrentAnnotation({ syncCsv: false });
+  await setCurrentIndex(state.currentIndex + 1, true);
 }
 
 async function saveCurrentAnnotation({ syncCsv }) {
@@ -874,25 +871,6 @@ async function syncCsvAfterAnnotation({ allowPicker, allowDownload }) {
   }
 
   return false;
-}
-
-async function syncCsvOnCompletion() {
-  if (canUseNativeFileSave()) {
-    try {
-      const handle = await ensureCsvHandle({ allowPicker: false });
-
-      if (handle) {
-        await writeCsvToHandle(handle);
-        els.saveStatus.textContent = "完了・CSV保存済み";
-        return true;
-      }
-    } catch {
-      state.csvHandle = null;
-    }
-  }
-
-  downloadCsv("完了・CSVをDownloadsに保存しました");
-  return true;
 }
 
 function isAbortError(error) {
@@ -1252,6 +1230,18 @@ function setResumeStatus(message) {
   els.resumeStatus.textContent = message;
 }
 
+function fitInstructionTextHeight() {
+  if (!els.instructionText) {
+    return;
+  }
+
+  els.instructionText.style.height = "auto";
+
+  if (Number.isFinite(els.instructionText.scrollHeight) && els.instructionText.scrollHeight > 0) {
+    els.instructionText.style.height = `${els.instructionText.scrollHeight + 2}px`;
+  }
+}
+
 function render() {
   const currentVideo = getCurrentVideo();
   const completedCount = state.videos.filter((video) => state.annotations[video.id]).length;
@@ -1276,7 +1266,7 @@ function render() {
   els.videoCounter.textContent = totalCount > 0 ? `${state.currentIndex + 1} / ${totalCount}` : "0 / 0";
   els.topbarStatus.textContent = currentVideo ? currentVideo.name : "動画未選択";
   els.emptyState.hidden = Boolean(currentVideo) && !state.isVideoLoading;
-  els.nextButton.textContent = state.currentIndex === totalCount - 1 && totalCount > 0 ? "完了" : "次へ";
+  els.nextButton.textContent = "次へ";
 
   if (!currentVideo) {
     els.emptyStateTitle.textContent = "動画を読み込んでください";
@@ -1304,6 +1294,7 @@ function renderValidation(forceMessage = false) {
   const hasRating = Boolean(state.selectedRating);
   const hasReason = reasonLength >= MIN_REASON_LENGTH;
   const hasVideo = Boolean(getCurrentVideo());
+  const hasNextVideo = state.currentIndex >= 0 && state.currentIndex < state.videos.length - 1;
   const canSave = hasVideo && hasRating && hasReason;
   const remaining = Math.max(0, MIN_REASON_LENGTH - reasonLength);
 
@@ -1311,7 +1302,7 @@ function renderValidation(forceMessage = false) {
   els.validationMessage.classList.toggle("is-valid", canSave);
   els.validationMessage.classList.toggle("is-invalid", !canSave && (forceMessage || reasonLength > 0 || hasRating));
   els.saveButton.disabled = !canSave;
-  els.nextButton.disabled = !canSave;
+  els.nextButton.disabled = !canSave || !hasNextVideo;
 
   if (!hasVideo) {
     els.validationMessage.textContent = "動画が必要です";
