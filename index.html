@@ -43,7 +43,7 @@
                 <span>動画ファイルを読み込む</span>
               </label>
               <button class="file-picker" type="button" id="folderPickerButton">フォルダーを読み込む</button>
-              <input class="hidden-file-input" id="videoFolder" type="file" accept="video/webm,video/mp4,video/quicktime,video/*" webkitdirectory multiple />
+              <input class="hidden-file-input" id="videoFolder" type="file" webkitdirectory multiple />
               <p class="helper-text">動画はこのブラウザ内で処理され、サーバーへアップロードされません。フォルダー選択時はブラウザ確認が表示されることがあります。</p>
             </div>
 
@@ -64,7 +64,7 @@
                 <input id="startResumeCsv" type="file" accept=".csv,text/csv" />
                 <span>前回CSVから再開</span>
               </label>
-              <p class="helper-text" id="startResumeStatus">先にCSVを選んでから同じフォルダーを読み込むこともできます</p>
+              <p class="helper-text" id="startResumeStatus">フォルダー内に一致するCSVがある場合は自動再開します。別場所のCSVはここから選べます</p>
             </div>
 
             <button class="secondary-button" type="button" id="clearVideosButton">キューから全動画を削除する</button>
@@ -205,7 +205,7 @@ NG例
               <input id="resumeCsv" type="file" accept=".csv,text/csv" />
               <span>CSVから作業再開</span>
             </label>
-            <p class="helper-text" id="resumeStatus">同じフォルダーを読み込んだ後、前回保存したCSVを選ぶと順番と履歴を復元します</p>
+            <p class="helper-text" id="resumeStatus">フォルダー内に一致するCSVがある場合は自動再開します。別場所のCSVはここから選べます</p>
             <p class="helper-text">保存でCSV出力、次へはブラウザ内に記録します</p>
           </section>
         </aside>

@@ -170,11 +170,15 @@ function selectRating(value) {
   renderValidation();
 }
 
-function addLocalFiles(fileList) {
-  const fileItems = Array.from(fileList || [])
-    .map((file) => ({ file, path: file.webkitRelativePath || file.name }))
-    .filter(({ file }) => isVideoFile(file));
+async function addLocalFiles(fileList) {
+  const localItems = Array.from(fileList || []).map((file) => ({
+    file,
+    path: file.webkitRelativePath || file.name,
+  }));
+  const fileItems = localItems.filter(({ file }) => isVideoFile(file));
+  const csvItems = localItems.filter(({ file }) => isCsvFile(file));
 
+  await autoLoadMatchingResumeCsv(csvItems, fileItems);
   addLocalFileItems(fileItems);
   els.videoFiles.value = "";
   els.videoFolder.value = "";
@@ -188,8 +192,12 @@ async function chooseLocalFolder() {
 
   try {
     const directoryHandle = await window.showDirectoryPicker({ mode: "read" });
-    const fileItems = await collectVideoFileItems(directoryHandle, directoryHandle.name);
-    addLocalFileItems(fileItems);
+    const { videoItems, csvItems } = await collectLocalFolderItems(
+      directoryHandle,
+      directoryHandle.name,
+    );
+    await autoLoadMatchingResumeCsv(csvItems, videoItems);
+    addLocalFileItems(videoItems);
   } catch (error) {
     if (!isAbortError(error)) {
       els.saveStatus.textContent = "フォルダーを読み込めませんでした";
@@ -197,20 +205,28 @@ async function chooseLocalFolder() {
   }
 }
 
-async function collectVideoFileItems(directoryHandle, prefix) {
-  const items = [];
+async function collectLocalFolderItems(directoryHandle, prefix) {
+  const items = {
+    videoItems: [],
+    csvItems: [],
+  };
 
   for await (const [name, handle] of directoryHandle.entries()) {
     const path = `${prefix}/${name}`;
 
     if (handle.kind === "file") {
       const file = await handle.getFile();
+      const item = { file, path };
 
       if (isVideoFile(file)) {
-        items.push({ file, path });
+        items.videoItems.push(item);
+      } else if (isCsvFile(file)) {
+        items.csvItems.push(item);
       }
     } else if (handle.kind === "directory") {
-      items.push(...(await collectVideoFileItems(handle, path)));
+      const childItems = await collectLocalFolderItems(handle, path);
+      items.videoItems.push(...childItems.videoItems);
+      items.csvItems.push(...childItems.csvItems);
     }
   }
 
@@ -232,6 +248,67 @@ function addLocalFileItems(fileItems) {
   });
 
   addVideos(videos);
+}
+
+async function autoLoadMatchingResumeCsv(csvItems, fileItems) {
+  if (!csvItems.length || !fileItems.length) {
+    return false;
+  }
+
+  const videoIds = new Set(fileItems.map((item) => item.path));
+  const expectedFileName = deriveCsvFileNameForFileItems(fileItems).toLowerCase();
+  const candidates = [];
+
+  for (const item of csvItems.sort(compareFileItemsByPath)) {
+    try {
+      const resumeRows = await readResumeRowsFromCsvFile(item.file);
+      const matchedRows = resumeRows.filter((row) => videoIds.has(row.video_id)).length;
+
+      if (!matchedRows) {
+        continue;
+      }
+
+      candidates.push({
+        item,
+        resumeRows,
+        matchedRows,
+        restoredAnnotations: resumeRows.filter(
+          (row) => videoIds.has(row.video_id) && hasCsvAnnotation(row),
+        ).length,
+        expectedNameMatch: (item.file.name || "").toLowerCase() === expectedFileName,
+      });
+    } catch {
+      // Ignore unrelated CSV files in the selected folder.
+    }
+  }
+
+  if (!candidates.length) {
+    setResumeStatus("フォルダー内に一致するCSVは見つかりませんでした");
+    return false;
+  }
+
+  candidates.sort(
+    (a, b) =>
+      b.matchedRows - a.matchedRows ||
+      Number(b.expectedNameMatch) - Number(a.expectedNameMatch) ||
+      b.restoredAnnotations - a.restoredAnnotations ||
+      compareFileItemsByPath(a.item, b.item),
+  );
+
+  const bestCandidate = candidates[0];
+  setResumeRowsFromCsv(bestCandidate.item.file, bestCandidate.resumeRows);
+  setResumeStatus(`${bestCandidate.item.file.name || "CSV"} を自動読み込みしました`);
+  return true;
+}
+
+function deriveCsvFileNameForFileItems(fileItems) {
+  const videos = fileItems.map(({ file, path }) => ({
+    videoId: path,
+    name: file.name,
+    source: "local",
+  }));
+
+  return `${sanitizeFileName(deriveDatasetName(videos))}_annotations.csv`;
 }
 
 async function addDriveLinks() {
@@ -300,12 +377,7 @@ async function loadResumeCsv(file) {
   }
 
   try {
-    const rows = parseCsvObjects(await file.text());
-    const resumeRows = normalizeResumeRows(rows);
-
-    if (!resumeRows.length) {
-      throw new Error("CSV内にvideo_idが見つかりませんでした");
-    }
+    const resumeRows = await readResumeRowsFromCsvFile(file);
 
     if (state.videos.length && (state.dirty || hasDrafts())) {
       const shouldRestore = window.confirm("未保存の入力があります。CSVの内容で作業履歴を復元しますか？");
@@ -315,13 +387,7 @@ async function loadResumeCsv(file) {
       }
     }
 
-    state.resumeRows = resumeRows;
-    state.resumeFileName = file.name || "";
-
-    if (file.name) {
-      state.csvFileName = file.name;
-      state.csvHandle = null;
-    }
+    setResumeRowsFromCsv(file, resumeRows);
 
     const result = applyResumeCsvToCurrentVideos();
 
@@ -337,6 +403,27 @@ async function loadResumeCsv(file) {
   } finally {
     els.resumeCsv.value = "";
     els.startResumeCsv.value = "";
+  }
+}
+
+async function readResumeRowsFromCsvFile(file) {
+  const rows = parseCsvObjects(await file.text());
+  const resumeRows = normalizeResumeRows(rows);
+
+  if (!resumeRows.length) {
+    throw new Error("CSV内にvideo_idが見つかりませんでした");
+  }
+
+  return resumeRows;
+}
+
+function setResumeRowsFromCsv(file, resumeRows) {
+  state.resumeRows = resumeRows;
+  state.resumeFileName = file.name || "";
+
+  if (file.name) {
+    state.csvFileName = file.name;
+    state.csvHandle = null;
   }
 }
 
@@ -1438,6 +1525,10 @@ function isVideoFile(file) {
   }
 
   return /\.(mp4|mov|m4v|webm|avi|mkv|ogv)$/i.test(file.name);
+}
+
+function isCsvFile(file) {
+  return file.type === "text/csv" || /\.csv$/i.test(file.name);
 }
 
 function extractDriveFileId(input) {
