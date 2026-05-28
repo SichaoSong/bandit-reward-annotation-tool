@@ -731,6 +731,7 @@ async function setCurrentIndex(index, autoplay) {
   els.reasonText.value = annotation?.reason || "";
   els.memoText.value = annotation?.memo || "";
   state.dirty = Boolean(state.drafts[video.id]);
+  resetPlaybackRate();
 
   els.videoError.hidden = true;
   els.emptyStateTitle.textContent = video.authFileId ? "Drive動画を読み込み中" : "動画を読み込み中";
@@ -1553,6 +1554,14 @@ function setPlaybackRate(rate) {
   state.playbackRate = rate;
   els.videoPlayer.playbackRate = rate;
   updatePlaybackUi();
+}
+
+function resetPlaybackRate() {
+  state.playbackRate = 1;
+
+  if (els.videoPlayer) {
+    els.videoPlayer.playbackRate = 1;
+  }
 }
 
 function updatePlaybackUi() {
