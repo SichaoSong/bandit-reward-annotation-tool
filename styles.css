@@ -265,6 +265,11 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.resume-picker {
+  min-height: 42px;
+  margin: 10px 0 8px;
+}
+
 .hidden-file-input {
   position: absolute;
   width: 1px;

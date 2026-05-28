@@ -10,6 +10,8 @@ const state = {
   currentIndex: -1,
   annotations: loadAnnotations(),
   drafts: {},
+  resumeRows: [],
+  resumeFileName: "",
   selectedRating: null,
   dirty: false,
   csvDirty: false,
@@ -77,6 +79,8 @@ function cacheElements() {
     progressStatus: document.getElementById("progressStatus"),
     saveStatus: document.getElementById("saveStatus"),
     saveFileName: document.getElementById("saveFileName"),
+    resumeCsv: document.getElementById("resumeCsv"),
+    resumeStatus: document.getElementById("resumeStatus"),
   });
 }
 
@@ -92,6 +96,7 @@ function bindEvents() {
   els.videoFolder.addEventListener("change", (event) => addLocalFiles(event.target.files));
   els.folderPickerButton.addEventListener("click", chooseLocalFolder);
   els.clearVideosButton.addEventListener("click", clearCurrentVideos);
+  els.resumeCsv.addEventListener("change", (event) => loadResumeCsv(event.target.files?.[0]));
   els.loadDriveLinks.addEventListener("click", addDriveLinks);
   els.googleAuthButton.addEventListener("click", connectGoogleDrive);
   els.reasonText.addEventListener("input", () => {
@@ -270,12 +275,142 @@ function addVideos(videos) {
   const uniqueVideos = orderVideosForQueue(videos.filter((video) => !existingIds.has(video.id)));
 
   state.videos.push(...uniqueVideos);
+  const resumeResult = applyResumeCsvToCurrentVideos();
+  const startIndex = resumeResult.matchedVideos ? findResumeStartIndex() : 0;
 
   if (state.currentIndex === -1 && state.videos.length > 0) {
-    setCurrentIndex(0, false);
+    setCurrentIndex(startIndex, false);
+  } else if (resumeResult.matchedVideos) {
+    setCurrentIndex(startIndex, false);
   }
 
   render();
+}
+
+async function loadResumeCsv(file) {
+  if (!file) {
+    return;
+  }
+
+  try {
+    const rows = parseCsvObjects(await file.text());
+    const resumeRows = normalizeResumeRows(rows);
+
+    if (!resumeRows.length) {
+      throw new Error("CSV内にvideo_idが見つかりませんでした");
+    }
+
+    if (state.videos.length && (state.dirty || hasDrafts())) {
+      const shouldRestore = window.confirm("未保存の入力があります。CSVの内容で作業履歴を復元しますか？");
+
+      if (!shouldRestore) {
+        return;
+      }
+    }
+
+    state.resumeRows = resumeRows;
+    state.resumeFileName = file.name || "";
+
+    if (file.name) {
+      state.csvFileName = file.name;
+      state.csvHandle = null;
+    }
+
+    const result = applyResumeCsvToCurrentVideos();
+
+    if (!state.videos.length) {
+      setResumeStatus("CSV読み込み済み。同じフォルダーを読み込むと復元します");
+    } else if (result.matchedVideos) {
+      setCurrentIndex(findResumeStartIndex(), false);
+    }
+
+    render();
+  } catch (error) {
+    setResumeStatus(error?.message || "CSVを読み込めませんでした");
+  } finally {
+    els.resumeCsv.value = "";
+  }
+}
+
+function applyResumeCsvToCurrentVideos() {
+  const result = {
+    matchedVideos: 0,
+    restoredAnnotations: 0,
+    totalRows: state.resumeRows.length,
+  };
+
+  if (!state.resumeRows.length || !state.videos.length) {
+    return result;
+  }
+
+  const rowByVideoId = new Map();
+  const orderByVideoId = new Map();
+
+  state.resumeRows.forEach((row) => {
+    rowByVideoId.set(row.video_id, row);
+
+    if (row.presentation_order && !orderByVideoId.has(row.video_id)) {
+      orderByVideoId.set(row.video_id, row.presentation_order);
+    }
+  });
+
+  result.matchedVideos = state.videos.filter((video) => rowByVideoId.has(video.videoId)).length;
+
+  if (!result.matchedVideos) {
+    setResumeStatus("CSVを読み込みましたが、現在の動画とは一致しません");
+    return result;
+  }
+
+  if (state.resumeFileName) {
+    state.csvFileName = state.resumeFileName;
+    state.csvHandle = null;
+  }
+
+  if (state.videos.every((video) => orderByVideoId.has(video.videoId))) {
+    state.videos.sort(
+      (a, b) => orderByVideoId.get(a.videoId) - orderByVideoId.get(b.videoId),
+    );
+  }
+
+  state.videos.forEach((video) => {
+    delete state.annotations[video.id];
+    delete state.drafts[video.id];
+  });
+
+  state.videos.forEach((video) => {
+    const row = rowByVideoId.get(video.videoId);
+
+    if (!row || !hasCsvAnnotation(row)) {
+      return;
+    }
+
+    state.annotations[video.id] = {
+      key: video.id,
+      video_id: video.videoId,
+      video_name: row.video_name || video.name,
+      source: row.source || video.source,
+      rating: row.rating,
+      reason: row.reason,
+      memo: row.memo,
+      instruction: row.instruction || els.instructionText.value.trim(),
+      annotated_at: row.annotated_at,
+    };
+    result.restoredAnnotations += 1;
+  });
+
+  state.dirty = false;
+  state.csvDirty = false;
+  persistAnnotations();
+  setResumeStatus(
+    `CSVから${result.restoredAnnotations}件の作業履歴を復元しました`,
+  );
+
+  return result;
+}
+
+function findResumeStartIndex() {
+  const firstIncompleteIndex = state.videos.findIndex((video) => !state.annotations[video.id]);
+  return firstIncompleteIndex === -1 ? 0 : firstIncompleteIndex;
 }
 
 function orderVideosForQueue(videos) {
@@ -953,6 +1088,127 @@ function idbTransactionDone(tx) {
   });
 }
 
+function parseCsvObjects(text) {
+  const records = parseCsvRecords(text).filter((row) => row.some((cell) => cell.trim()));
+
+  if (records.length < 2) {
+    return [];
+  }
+
+  const headers = records[0].map((header) => normalizeCsvHeader(header));
+
+  return records.slice(1).map((record) =>
+    headers.reduce((row, header, index) => {
+      if (header) {
+        row[header] = record[index] ?? "";
+      }
+
+      return row;
+    }, {}),
+  );
+}
+
+function parseCsvRecords(text) {
+  const records = [];
+  let record = [];
+  let cell = "";
+  let inQuotes = false;
+  const input = String(text || "").replace(/^\ufeff/, "");
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+
+    if (inQuotes) {
+      if (char === '"' && input[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      record.push(cell);
+      cell = "";
+    } else if (char === "\n" || char === "\r") {
+      record.push(cell);
+      records.push(record);
+      record = [];
+      cell = "";
+
+      if (char === "\r" && input[index + 1] === "\n") {
+        index += 1;
+      }
+    } else {
+      cell += char;
+    }
+  }
+
+  if (cell || record.length || input.endsWith(",")) {
+    record.push(cell);
+    records.push(record);
+  }
+
+  return records;
+}
+
+function normalizeResumeRows(rows) {
+  return rows
+    .map((row) => {
+      const videoId = readCsvField(row, "video_id", "videoId").trim();
+
+      if (!videoId) {
+        return null;
+      }
+
+      return {
+        annotated_at: readCsvField(row, "annotated_at"),
+        presentation_order: parsePositiveInteger(readCsvField(row, "presentation_order")),
+        video_id: videoId,
+        video_name: readCsvField(row, "video_name", "videoName"),
+        source: readCsvField(row, "source"),
+        rating: parseRating(readCsvField(row, "rating")),
+        reason: readCsvField(row, "reason"),
+        memo: readCsvField(row, "memo"),
+        instruction: readCsvField(row, "instruction"),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeCsvHeader(header) {
+  return String(header || "").trim().replace(/^\ufeff/, "");
+}
+
+function readCsvField(row, ...names) {
+  for (const name of names) {
+    if (Object.prototype.hasOwnProperty.call(row, name)) {
+      return String(row[name] ?? "");
+    }
+  }
+
+  return "";
+}
+
+function parsePositiveInteger(value) {
+  const number = Number.parseInt(value, 10);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function parseRating(value) {
+  const number = Number.parseInt(value, 10);
+  return Number.isFinite(number) && number >= 1 && number <= 7 ? number : null;
+}
+
+function hasCsvAnnotation(row) {
+  return Number.isInteger(row.rating);
+}
+
 function createCsv() {
   const headers = [
     "annotated_at",
@@ -965,22 +1221,23 @@ function createCsv() {
     "memo",
     "instruction",
   ];
-  const annotations = state.videos
-    .map((video, index) => {
-      const annotation = state.annotations[video.id];
+  const records = state.videos.map((video, index) => {
+    const annotation = state.annotations[video.id];
 
-      if (!annotation) {
-        return null;
-      }
-
-      return {
-        ...annotation,
-        presentation_order: index + 1,
-      };
-    })
-    .filter(Boolean);
-  const rows = annotations.map((annotation) =>
-    headers.map((header) => csvCell(annotation[header])).join(","),
+    return {
+      annotated_at: annotation?.annotated_at || "",
+      presentation_order: index + 1,
+      video_id: video.videoId,
+      video_name: video.name,
+      source: video.source,
+      rating: annotation?.rating || "",
+      reason: annotation?.reason || "",
+      memo: annotation?.memo || "",
+      instruction: annotation?.instruction || els.instructionText.value.trim(),
+    };
+  });
+  const rows = records.map((record) =>
+    headers.map((header) => csvCell(record[header])).join(","),
   );
 
   return `\ufeff${headers.join(",")}\n${rows.join("\n")}`;
@@ -989,6 +1246,10 @@ function createCsv() {
 function csvCell(value) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function setResumeStatus(message) {
+  els.resumeStatus.textContent = message;
 }
 
 function render() {
