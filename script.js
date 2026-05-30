@@ -1430,6 +1430,7 @@ function createCsv() {
     "reason",
     "memo",
     "quality_flags",
+    "play_seconds",
     "video_duration_seconds",
     "watched_ratio",
   ];
@@ -1445,6 +1446,7 @@ function createCsv() {
       reason: annotation?.reason || "",
       memo: annotation?.memo || "",
       quality_flags: annotation?.quality_flags || "",
+      play_seconds: formatMetric(annotation?.play_seconds),
       video_duration_seconds: formatMetric(annotation?.video_duration_seconds),
       watched_ratio: formatMetric(annotation?.watched_ratio),
     };

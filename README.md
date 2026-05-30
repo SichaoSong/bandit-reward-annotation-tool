@@ -54,7 +54,7 @@
 
 同じ制約により、WebページはDownloads内のCSVを勝手に探して読み込むこともできません。自動再開できるのは、ユーザーが選択した動画フォルダーの中に一致CSVが含まれている場合です。
 
-品質確認用に、CSVには `video_duration_seconds`、`watched_ratio`、`quality_flags` を保存します。`watched_ratio` は動画全体のうち実際に再生された範囲の割合です。動画を再生していない場合は `no_playback`、視聴割合が低い場合は `low_watch_ratio`、実再生時間が短い場合は `low_play_time`、評価不可の場合は `unable_to_evaluate` が `quality_flags` に入ります。
+品質確認用に、CSVには `play_seconds`、`video_duration_seconds`、`watched_ratio`、`quality_flags` を保存します。`play_seconds` は実際に動画が再生状態だった秒数で、動画の長さを取得できない場合でも記録されます。動画を再生していない場合は `no_playback`、視聴割合が低い場合は `low_watch_ratio`、実再生時間が短い場合は `low_play_time`、評価不可の場合は `unable_to_evaluate` が `quality_flags` に入ります。
 
 ## Google Drive動画について
 
