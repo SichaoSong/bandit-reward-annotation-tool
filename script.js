@@ -1,4 +1,7 @@
 const MIN_REASON_LENGTH = 50;
+const MAX_PLAYBACK_RATE = 1.25;
+const LOW_WATCH_RATIO_THRESHOLD = 0.3;
+const LOW_PLAY_SECONDS_THRESHOLD = 5;
 const STORAGE_KEY = "bandit-reward-annotations-v1";
 const CSV_HANDLE_DB = "bandit-reward-csv-handles-v1";
 const CSV_HANDLE_STORE = "handles";
@@ -13,6 +16,7 @@ const state = {
   resumeRows: [],
   resumeFileName: "",
   selectedRating: null,
+  unableToEvaluate: false,
   dirty: false,
   csvDirty: false,
   csvHandle: null,
@@ -21,6 +25,8 @@ const state = {
   datasetName: "bandit_annotations",
   loadMode: "replace",
   playbackRate: 1,
+  playbackLogs: {},
+  suppressPlaybackEvents: false,
   isVideoLoading: false,
   loadingVideoId: "",
   googleAccessToken: "",
@@ -74,6 +80,7 @@ function cacheElements() {
     videoCounter: document.getElementById("videoCounter"),
     ratingGroup: document.getElementById("ratingGroup"),
     ratingStatus: document.getElementById("ratingStatus"),
+    unableToEvaluate: document.getElementById("unableToEvaluate"),
     reasonText: document.getElementById("reasonText"),
     memoText: document.getElementById("memoText"),
     charCount: document.getElementById("charCount"),
@@ -110,8 +117,20 @@ function bindEvents() {
     state.dirty = true;
     renderValidation();
   });
+  els.unableToEvaluate.addEventListener("change", () => {
+    state.unableToEvaluate = els.unableToEvaluate.checked;
+
+    if (state.unableToEvaluate) {
+      state.selectedRating = null;
+    }
+
+    state.dirty = true;
+    renderRatingState();
+    renderValidation();
+  });
   els.memoText.addEventListener("input", () => {
     state.dirty = true;
+    renderValidation();
   });
   els.previousButton.addEventListener("click", () => moveToIndex(state.currentIndex - 1));
   els.saveButton.addEventListener("click", saveButtonHandler);
@@ -120,10 +139,12 @@ function bindEvents() {
   els.playPauseButton.addEventListener("click", togglePlayback);
   els.forwardButton.addEventListener("click", () => skipVideo(10));
   els.playbackRate.addEventListener("change", () => setPlaybackRate(Number(els.playbackRate.value)));
-  els.videoPlayer.addEventListener("loadedmetadata", updatePlaybackUi);
-  els.videoPlayer.addEventListener("timeupdate", updatePlaybackUi);
-  els.videoPlayer.addEventListener("play", updatePlaybackUi);
-  els.videoPlayer.addEventListener("pause", updatePlaybackUi);
+  els.videoPlayer.addEventListener("loadedmetadata", handlePlaybackMetadata);
+  els.videoPlayer.addEventListener("timeupdate", handlePlaybackTimeUpdate);
+  els.videoPlayer.addEventListener("play", handlePlaybackPlay);
+  els.videoPlayer.addEventListener("pause", handlePlaybackPause);
+  els.videoPlayer.addEventListener("ended", handlePlaybackPause);
+  els.videoPlayer.addEventListener("seeking", handlePlaybackSeeking);
   els.videoPlayer.addEventListener("ratechange", updatePlaybackUi);
   els.videoPlayer.addEventListener("error", showVideoError);
 
@@ -165,6 +186,10 @@ function renderRatingButtons() {
 }
 
 function selectRating(value) {
+  if (state.unableToEvaluate) {
+    return;
+  }
+
   state.selectedRating = value;
   state.dirty = true;
   renderRatingState();
@@ -486,11 +511,21 @@ function applyResumeCsvToCurrentVideos() {
       video_id: video.videoId,
       video_name: row.video_name || video.name,
       source: row.source || video.source,
+      unable_to_evaluate: row.unable_to_evaluate,
       rating: row.rating,
       reason: row.reason,
       memo: row.memo,
       instruction: row.instruction || els.instructionText.value.trim(),
       annotated_at: row.annotated_at,
+      quality_flags: row.quality_flags,
+      video_duration_seconds: row.video_duration_seconds,
+      watched_seconds: row.watched_seconds,
+      watched_ratio: row.watched_ratio,
+      play_seconds: row.play_seconds,
+      wall_time_seconds: row.wall_time_seconds,
+      play_count: row.play_count,
+      seek_count: row.seek_count,
+      max_position_seconds: row.max_position_seconds,
     };
     result.restoredAnnotations += 1;
   });
@@ -639,7 +674,9 @@ function clearVideoQueue() {
   state.videos = [];
   state.currentIndex = -1;
   state.selectedRating = null;
+  state.unableToEvaluate = false;
   state.drafts = {};
+  state.playbackLogs = {};
   state.dirty = false;
   state.csvDirty = false;
   state.isVideoLoading = false;
@@ -721,13 +758,16 @@ async function setCurrentIndex(index, autoplay) {
     return;
   }
 
+  finalizeCurrentPlaybackLog();
   state.currentIndex = index;
   state.isVideoLoading = true;
   const video = getCurrentVideo();
+  ensurePlaybackLog(video);
   state.loadingVideoId = video.id;
   const annotation = state.drafts[video.id] || state.annotations[video.id];
 
   state.selectedRating = annotation?.rating || null;
+  state.unableToEvaluate = Boolean(annotation?.unable_to_evaluate);
   els.reasonText.value = annotation?.reason || "";
   els.memoText.value = annotation?.memo || "";
   state.dirty = Boolean(state.drafts[video.id]);
@@ -735,9 +775,11 @@ async function setCurrentIndex(index, autoplay) {
 
   els.videoError.hidden = true;
   els.emptyStateTitle.textContent = video.authFileId ? "Drive動画を読み込み中" : "動画を読み込み中";
+  state.suppressPlaybackEvents = true;
   els.videoPlayer.pause();
   els.videoPlayer.removeAttribute("src");
   els.videoPlayer.load();
+  state.suppressPlaybackEvents = false;
   render();
 
   try {
@@ -819,7 +861,7 @@ async function nextButtonHandler() {
   }
 
   await saveCurrentAnnotation({ syncCsv: false });
-  await setCurrentIndex(state.currentIndex + 1, true);
+  await setCurrentIndex(state.currentIndex + 1, false);
 }
 
 async function saveCurrentAnnotation({ syncCsv }) {
@@ -828,16 +870,28 @@ async function saveCurrentAnnotation({ syncCsv }) {
     return;
   }
 
+  finalizeCurrentPlaybackLog({ keepVisitActive: true });
+  const playbackMetrics = getPlaybackMetrics(video);
   const annotation = {
     key: video.id,
     video_id: video.videoId,
     video_name: video.name,
     source: video.source,
-    rating: state.selectedRating,
-    reason: els.reasonText.value.trim(),
+    unable_to_evaluate: state.unableToEvaluate,
+    rating: state.unableToEvaluate ? null : state.selectedRating,
+    reason: state.unableToEvaluate ? "" : els.reasonText.value.trim(),
     memo: els.memoText.value.trim(),
     instruction: els.instructionText.value.trim(),
     annotated_at: new Date().toISOString(),
+    quality_flags: buildQualityFlags(playbackMetrics, state.unableToEvaluate),
+    video_duration_seconds: playbackMetrics.duration,
+    watched_seconds: playbackMetrics.watchedSeconds,
+    watched_ratio: playbackMetrics.watchedRatio,
+    play_seconds: playbackMetrics.playSeconds,
+    wall_time_seconds: playbackMetrics.wallSeconds,
+    play_count: playbackMetrics.playCount,
+    seek_count: playbackMetrics.seekCount,
+    max_position_seconds: playbackMetrics.maxPosition,
   };
 
   state.annotations[video.id] = annotation;
@@ -865,7 +919,7 @@ function saveCurrentDraft() {
 
   const reason = els.reasonText.value;
   const memo = els.memoText.value;
-  const hasDraft = Boolean(state.selectedRating || reason.trim() || memo.trim());
+  const hasDraft = Boolean(state.unableToEvaluate || state.selectedRating || reason.trim() || memo.trim());
 
   if (!hasDraft) {
     delete state.drafts[video.id];
@@ -875,6 +929,7 @@ function saveCurrentDraft() {
 
   state.drafts[video.id] = {
     rating: state.selectedRating,
+    unable_to_evaluate: state.unableToEvaluate,
     reason,
     memo,
   };
@@ -1116,6 +1171,8 @@ function downloadCsv(statusMessage = "CSV保存済み") {
 }
 
 function handlePageHide() {
+  finalizeCurrentPlaybackLog();
+
   if (!hasUnsavedCsvChanges()) {
     return;
   }
@@ -1124,6 +1181,8 @@ function handlePageHide() {
 }
 
 function handleBeforeUnload(event) {
+  finalizeCurrentPlaybackLog();
+
   if (!hasUnsavedCsvChanges()) {
     return;
   }
@@ -1301,10 +1360,20 @@ function normalizeResumeRows(rows) {
         video_id: videoId,
         video_name: readCsvField(row, "video_name", "videoName"),
         source: readCsvField(row, "source"),
+        unable_to_evaluate: parseBoolean(readCsvField(row, "unable_to_evaluate")),
         rating: parseRating(readCsvField(row, "rating")),
         reason: readCsvField(row, "reason"),
         memo: readCsvField(row, "memo"),
         instruction: readCsvField(row, "instruction"),
+        quality_flags: readCsvField(row, "quality_flags"),
+        video_duration_seconds: parseOptionalNumber(readCsvField(row, "video_duration_seconds")),
+        watched_seconds: parseOptionalNumber(readCsvField(row, "watched_seconds")),
+        watched_ratio: parseOptionalNumber(readCsvField(row, "watched_ratio")),
+        play_seconds: parseOptionalNumber(readCsvField(row, "play_seconds")),
+        wall_time_seconds: parseOptionalNumber(readCsvField(row, "wall_time_seconds")),
+        play_count: parseNonNegativeInteger(readCsvField(row, "play_count")),
+        seek_count: parseNonNegativeInteger(readCsvField(row, "seek_count")),
+        max_position_seconds: parseOptionalNumber(readCsvField(row, "max_position_seconds")),
       };
     })
     .filter(Boolean);
@@ -1329,13 +1398,27 @@ function parsePositiveInteger(value) {
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
+function parseNonNegativeInteger(value) {
+  const number = Number.parseInt(value, 10);
+  return Number.isFinite(number) && number >= 0 ? number : "";
+}
+
+function parseOptionalNumber(value) {
+  const number = Number.parseFloat(value);
+  return Number.isFinite(number) ? number : "";
+}
+
 function parseRating(value) {
   const number = Number.parseInt(value, 10);
   return Number.isFinite(number) && number >= 1 && number <= 7 ? number : null;
 }
 
+function parseBoolean(value) {
+  return /^(1|true|yes|y)$/i.test(String(value || "").trim());
+}
+
 function hasCsvAnnotation(row) {
-  return Number.isInteger(row.rating);
+  return Number.isInteger(row.rating) || row.unable_to_evaluate;
 }
 
 function createCsv() {
@@ -1345,10 +1428,20 @@ function createCsv() {
     "video_id",
     "video_name",
     "source",
+    "unable_to_evaluate",
     "rating",
     "reason",
     "memo",
     "instruction",
+    "quality_flags",
+    "video_duration_seconds",
+    "watched_seconds",
+    "watched_ratio",
+    "play_seconds",
+    "wall_time_seconds",
+    "play_count",
+    "seek_count",
+    "max_position_seconds",
   ];
   const records = state.videos.map((video, index) => {
     const annotation = state.annotations[video.id];
@@ -1359,10 +1452,20 @@ function createCsv() {
       video_id: video.videoId,
       video_name: video.name,
       source: video.source,
+      unable_to_evaluate: annotation?.unable_to_evaluate ? "true" : "",
       rating: annotation?.rating || "",
       reason: annotation?.reason || "",
       memo: annotation?.memo || "",
       instruction: annotation?.instruction || els.instructionText.value.trim(),
+      quality_flags: annotation?.quality_flags || "",
+      video_duration_seconds: formatMetric(annotation?.video_duration_seconds),
+      watched_seconds: formatMetric(annotation?.watched_seconds),
+      watched_ratio: formatMetric(annotation?.watched_ratio),
+      play_seconds: formatMetric(annotation?.play_seconds),
+      wall_time_seconds: formatMetric(annotation?.wall_time_seconds),
+      play_count: annotation?.play_count ?? "",
+      seek_count: annotation?.seek_count ?? "",
+      max_position_seconds: formatMetric(annotation?.max_position_seconds),
     };
   });
   const rows = records.map((record) =>
@@ -1375,6 +1478,10 @@ function createCsv() {
 function csvCell(value) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function formatMetric(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(3) : "";
 }
 
 function setResumeStatus(message) {
@@ -1439,35 +1546,88 @@ function renderRatingState() {
     const selected = state.selectedRating === value;
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-checked", String(selected));
+    button.disabled = state.unableToEvaluate;
   });
 
-  els.ratingStatus.textContent = state.selectedRating ? `${state.selectedRating} / 7` : "未選択";
+  els.unableToEvaluate.checked = state.unableToEvaluate;
+  els.ratingStatus.textContent = state.unableToEvaluate
+    ? "評価不可"
+    : state.selectedRating
+      ? `${state.selectedRating} / 7`
+      : "未選択";
 }
 
 function renderValidation(forceMessage = false) {
   const reasonLength = els.reasonText.value.trim().length;
+  const memoLength = els.memoText.value.trim().length;
   const hasRating = Boolean(state.selectedRating);
   const hasReason = reasonLength >= MIN_REASON_LENGTH;
   const hasVideo = Boolean(getCurrentVideo());
   const hasNextVideo = state.currentIndex >= 0 && state.currentIndex < state.videos.length - 1;
-  const canSave = hasVideo && hasRating && hasReason;
+  const hasDuplicateReason = !state.unableToEvaluate && isDuplicateReason(els.reasonText.value);
+  const canSave =
+    hasVideo &&
+    (state.unableToEvaluate
+      ? memoLength > 0
+      : hasRating && hasReason && !hasDuplicateReason);
   const remaining = Math.max(0, MIN_REASON_LENGTH - reasonLength);
+  const hasAttemptedInput =
+    forceMessage ||
+    reasonLength > 0 ||
+    memoLength > 0 ||
+    hasRating ||
+    state.unableToEvaluate;
 
-  els.charCount.textContent = `${reasonLength} / ${MIN_REASON_LENGTH}`;
+  els.reasonText.disabled = state.unableToEvaluate;
+  els.charCount.textContent = state.unableToEvaluate
+    ? "理由不要"
+    : `${reasonLength} / ${MIN_REASON_LENGTH}`;
   els.validationMessage.classList.toggle("is-valid", canSave);
-  els.validationMessage.classList.toggle("is-invalid", !canSave && (forceMessage || reasonLength > 0 || hasRating));
+  els.validationMessage.classList.toggle("is-invalid", !canSave && hasAttemptedInput);
   els.saveButton.disabled = !canSave;
   els.nextButton.disabled = !canSave || !hasNextVideo;
 
   if (!hasVideo) {
     els.validationMessage.textContent = "動画が必要です";
+  } else if (state.unableToEvaluate && !memoLength) {
+    els.validationMessage.textContent = "評価不可の理由をメモ欄に記入してください";
+  } else if (state.unableToEvaluate) {
+    els.validationMessage.textContent = "保存できます";
   } else if (!hasRating) {
     els.validationMessage.textContent = "採点を選択してください";
   } else if (!hasReason) {
     els.validationMessage.textContent = `あと${remaining}文字必要です`;
+  } else if (hasDuplicateReason) {
+    els.validationMessage.textContent = "同じ理由が既に使われています";
   } else {
     els.validationMessage.textContent = "保存できます";
   }
+}
+
+function isDuplicateReason(reason) {
+  const normalizedReason = normalizeReasonForDuplicate(reason);
+  const currentVideo = getCurrentVideo();
+
+  if (!normalizedReason || !currentVideo) {
+    return false;
+  }
+
+  return state.videos.some((video) => {
+    if (video.id === currentVideo.id) {
+      return false;
+    }
+
+    const annotation = state.annotations[video.id];
+    return (
+      annotation &&
+      !annotation.unable_to_evaluate &&
+      normalizeReasonForDuplicate(annotation.reason) === normalizedReason
+    );
+  });
+}
+
+function normalizeReasonForDuplicate(reason) {
+  return String(reason || "").trim().replace(/\s+/g, " ");
 }
 
 function renderQueue() {
@@ -1493,7 +1653,11 @@ function renderQueue() {
     title.textContent = video.name;
 
     rating.className = annotation ? "queue-rating" : "queue-rating is-empty";
-    rating.textContent = annotation ? annotation.rating : "-";
+    rating.textContent = annotation
+      ? annotation.unable_to_evaluate
+        ? "不可"
+        : annotation.rating
+      : "-";
 
     button.append(number, title, rating);
     item.append(button);
@@ -1506,10 +1670,18 @@ function getCurrentVideo() {
 }
 
 function canSaveCurrent() {
+  if (!getCurrentVideo()) {
+    return false;
+  }
+
+  if (state.unableToEvaluate) {
+    return Boolean(els.memoText.value.trim());
+  }
+
   return Boolean(
-    getCurrentVideo() &&
-      state.selectedRating &&
-      els.reasonText.value.trim().length >= MIN_REASON_LENGTH,
+    state.selectedRating &&
+      els.reasonText.value.trim().length >= MIN_REASON_LENGTH &&
+      !isDuplicateReason(els.reasonText.value),
   );
 }
 
@@ -1551,8 +1723,9 @@ function setPlaybackRate(rate) {
     return;
   }
 
-  state.playbackRate = rate;
-  els.videoPlayer.playbackRate = rate;
+  const safeRate = Math.min(rate, MAX_PLAYBACK_RATE);
+  state.playbackRate = safeRate;
+  els.videoPlayer.playbackRate = safeRate;
   updatePlaybackUi();
 }
 
@@ -1562,6 +1735,240 @@ function resetPlaybackRate() {
   if (els.videoPlayer) {
     els.videoPlayer.playbackRate = 1;
   }
+}
+
+function handlePlaybackMetadata() {
+  if (state.suppressPlaybackEvents) {
+    updatePlaybackUi();
+    return;
+  }
+
+  updatePlaybackLogProgress();
+  updatePlaybackUi();
+}
+
+function handlePlaybackPlay() {
+  if (state.suppressPlaybackEvents) {
+    updatePlaybackUi();
+    return;
+  }
+
+  const log = ensureCurrentPlaybackLog();
+
+  if (!log) {
+    updatePlaybackUi();
+    return;
+  }
+
+  log.playCount += 1;
+  log.playStartedAt = Date.now();
+  log.lastMediaTime = getSafeVideoTime();
+  updatePlaybackUi();
+}
+
+function handlePlaybackPause() {
+  if (state.suppressPlaybackEvents) {
+    updatePlaybackUi();
+    return;
+  }
+
+  updatePlaybackLogProgress();
+  stopPlaybackClock();
+  updatePlaybackUi();
+}
+
+function handlePlaybackTimeUpdate() {
+  if (state.suppressPlaybackEvents) {
+    updatePlaybackUi();
+    return;
+  }
+
+  updatePlaybackLogProgress();
+  updatePlaybackUi();
+}
+
+function handlePlaybackSeeking() {
+  if (state.suppressPlaybackEvents) {
+    return;
+  }
+
+  const log = ensureCurrentPlaybackLog();
+
+  if (!log) {
+    return;
+  }
+
+  log.seekCount += 1;
+  log.lastMediaTime = getSafeVideoTime();
+}
+
+function ensureCurrentPlaybackLog() {
+  return ensurePlaybackLog(getCurrentVideo());
+}
+
+function ensurePlaybackLog(video) {
+  if (!video) {
+    return null;
+  }
+
+  if (!state.playbackLogs[video.id]) {
+    state.playbackLogs[video.id] = {
+      wallSeconds: 0,
+      activeSince: Date.now(),
+      playStartedAt: null,
+      playedSeconds: 0,
+      watchedRanges: [],
+      lastMediaTime: null,
+      playCount: 0,
+      seekCount: 0,
+      maxPosition: 0,
+      duration: "",
+    };
+  }
+
+  const log = state.playbackLogs[video.id];
+
+  if (!log.activeSince) {
+    log.activeSince = Date.now();
+  }
+
+  return log;
+}
+
+function finalizeCurrentPlaybackLog({ keepVisitActive = false } = {}) {
+  const log = state.playbackLogs[getCurrentVideo()?.id];
+
+  if (!log) {
+    return;
+  }
+
+  updatePlaybackLogProgress();
+  stopPlaybackClock({ keepActive: keepVisitActive });
+
+  if (log.activeSince) {
+    const now = Date.now();
+    log.wallSeconds += Math.max(0, (now - log.activeSince) / 1000);
+    log.activeSince = keepVisitActive ? now : null;
+  }
+}
+
+function updatePlaybackLogProgress() {
+  const log = state.playbackLogs[getCurrentVideo()?.id];
+
+  if (!log) {
+    return;
+  }
+
+  const currentTime = getSafeVideoTime();
+  const duration = getSafeVideoDuration();
+
+  if (Number.isFinite(duration) && duration > 0) {
+    log.duration = duration;
+  }
+
+  if (Number.isFinite(currentTime)) {
+    log.maxPosition = Math.max(log.maxPosition || 0, currentTime);
+
+    if (Number.isFinite(log.lastMediaTime) && currentTime > log.lastMediaTime) {
+      addWatchedRange(log, log.lastMediaTime, currentTime);
+    }
+
+    log.lastMediaTime = currentTime;
+  }
+}
+
+function stopPlaybackClock({ keepActive = false } = {}) {
+  const log = state.playbackLogs[getCurrentVideo()?.id];
+
+  if (!log?.playStartedAt) {
+    return;
+  }
+
+  const now = Date.now();
+  log.playedSeconds += Math.max(0, (now - log.playStartedAt) / 1000);
+  log.playStartedAt = keepActive && !els.videoPlayer.paused ? now : null;
+}
+
+function addWatchedRange(log, start, end) {
+  const safeStart = Math.max(0, Math.min(start, end));
+  const safeEnd = Math.max(0, Math.max(start, end));
+
+  if (safeEnd - safeStart <= 0.05) {
+    return;
+  }
+
+  log.watchedRanges.push([safeStart, safeEnd]);
+}
+
+function getPlaybackMetrics(video) {
+  const log = state.playbackLogs[video?.id];
+  const duration = Number.isFinite(log?.duration) ? log.duration : "";
+  const watchedSeconds = sumWatchedRanges(log?.watchedRanges || []);
+  const watchedRatio = Number.isFinite(duration) && duration > 0
+    ? Math.min(1, watchedSeconds / duration)
+    : "";
+
+  return {
+    duration,
+    watchedSeconds,
+    watchedRatio,
+    playSeconds: log?.playedSeconds || 0,
+    wallSeconds: log?.wallSeconds || 0,
+    playCount: log?.playCount || 0,
+    seekCount: log?.seekCount || 0,
+    maxPosition: log?.maxPosition || 0,
+  };
+}
+
+function sumWatchedRanges(ranges) {
+  const sortedRanges = ranges
+    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start)
+    .sort((a, b) => a[0] - b[0]);
+  const mergedRanges = [];
+
+  sortedRanges.forEach(([start, end]) => {
+    const lastRange = mergedRanges[mergedRanges.length - 1];
+
+    if (!lastRange || start > lastRange[1]) {
+      mergedRanges.push([start, end]);
+      return;
+    }
+
+    lastRange[1] = Math.max(lastRange[1], end);
+  });
+
+  return mergedRanges.reduce((total, [start, end]) => total + (end - start), 0);
+}
+
+function buildQualityFlags(metrics, unableToEvaluate) {
+  if (unableToEvaluate) {
+    return "unable_to_evaluate";
+  }
+
+  const flags = [];
+  const hasDuration = Number.isFinite(metrics.duration) && metrics.duration > 0;
+
+  if (!metrics.playCount) {
+    flags.push("no_playback");
+  }
+
+  if (hasDuration && Number.isFinite(metrics.watchedRatio) && metrics.watchedRatio < LOW_WATCH_RATIO_THRESHOLD) {
+    flags.push("low_watch_ratio");
+  }
+
+  if (metrics.playSeconds < Math.min(LOW_PLAY_SECONDS_THRESHOLD, hasDuration ? metrics.duration : LOW_PLAY_SECONDS_THRESHOLD)) {
+    flags.push("low_play_time");
+  }
+
+  return flags.join(";");
+}
+
+function getSafeVideoTime() {
+  return Number.isFinite(els.videoPlayer.currentTime) ? els.videoPlayer.currentTime : null;
+}
+
+function getSafeVideoDuration() {
+  return Number.isFinite(els.videoPlayer.duration) ? els.videoPlayer.duration : null;
 }
 
 function updatePlaybackUi() {

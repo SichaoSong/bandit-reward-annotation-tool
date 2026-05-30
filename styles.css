@@ -64,6 +64,11 @@ textarea[readonly] {
   background: #f8fbfc;
 }
 
+textarea:disabled {
+  color: #617084;
+  background: #eef3f1;
+}
+
 input,
 select {
   width: 100%;
@@ -459,6 +464,22 @@ button:focus-visible {
   background: var(--teal);
 }
 
+.checkbox-control {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.checkbox-control input {
+  width: auto;
+  margin: 2px 0 0;
+}
+
 .reason-field textarea {
   min-height: 88px;
   max-height: 18vh;
@@ -795,6 +816,10 @@ button:focus-visible {
 
 .app-shell.is-working .rating-button {
   min-height: 38px;
+}
+
+.app-shell.is-working .unavailable-control {
+  margin-bottom: 8px;
 }
 
 .app-shell.is-working .reason-field {
