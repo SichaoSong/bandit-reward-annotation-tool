@@ -882,10 +882,9 @@ async function saveCurrentAnnotation({ syncCsv }) {
     reason: state.unableToEvaluate ? "" : els.reasonText.value.trim(),
     memo: els.memoText.value.trim(),
     instruction: els.instructionText.value.trim(),
-    annotated_at: new Date().toISOString(),
+    annotated_at: formatJstTimestamp(),
     quality_flags: buildQualityFlags(playbackMetrics, state.unableToEvaluate),
     video_duration_seconds: playbackMetrics.duration,
-    watched_seconds: playbackMetrics.watchedSeconds,
     watched_ratio: playbackMetrics.watchedRatio,
     play_seconds: playbackMetrics.playSeconds,
     wall_time_seconds: playbackMetrics.wallSeconds,
@@ -1426,22 +1425,13 @@ function createCsv() {
     "annotated_at",
     "presentation_order",
     "video_id",
-    "video_name",
-    "source",
     "unable_to_evaluate",
     "rating",
     "reason",
     "memo",
-    "instruction",
     "quality_flags",
     "video_duration_seconds",
-    "watched_seconds",
     "watched_ratio",
-    "play_seconds",
-    "wall_time_seconds",
-    "play_count",
-    "seek_count",
-    "max_position_seconds",
   ];
   const records = state.videos.map((video, index) => {
     const annotation = state.annotations[video.id];
@@ -1450,22 +1440,13 @@ function createCsv() {
       annotated_at: annotation?.annotated_at || "",
       presentation_order: index + 1,
       video_id: video.videoId,
-      video_name: video.name,
-      source: video.source,
       unable_to_evaluate: annotation?.unable_to_evaluate ? "true" : "",
       rating: annotation?.rating || "",
       reason: annotation?.reason || "",
       memo: annotation?.memo || "",
-      instruction: annotation?.instruction || els.instructionText.value.trim(),
       quality_flags: annotation?.quality_flags || "",
       video_duration_seconds: formatMetric(annotation?.video_duration_seconds),
-      watched_seconds: formatMetric(annotation?.watched_seconds),
       watched_ratio: formatMetric(annotation?.watched_ratio),
-      play_seconds: formatMetric(annotation?.play_seconds),
-      wall_time_seconds: formatMetric(annotation?.wall_time_seconds),
-      play_count: annotation?.play_count ?? "",
-      seek_count: annotation?.seek_count ?? "",
-      max_position_seconds: formatMetric(annotation?.max_position_seconds),
     };
   });
   const rows = records.map((record) =>
@@ -1473,6 +1454,18 @@ function createCsv() {
   );
 
   return `\ufeff${headers.join(",")}\n${rows.join("\n")}`;
+}
+
+function formatJstTimestamp(date = new Date()) {
+  const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const year = jstDate.getUTCFullYear();
+  const month = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(jstDate.getUTCDate()).padStart(2, "0");
+  const hours = String(jstDate.getUTCHours()).padStart(2, "0");
+  const minutes = String(jstDate.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(jstDate.getUTCSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
 }
 
 function csvCell(value) {
@@ -1902,7 +1895,12 @@ function addWatchedRange(log, start, end) {
 
 function getPlaybackMetrics(video) {
   const log = state.playbackLogs[video?.id];
-  const duration = Number.isFinite(log?.duration) ? log.duration : "";
+  const liveDuration = video?.id === getCurrentVideo()?.id ? getSafeVideoDuration() : null;
+  const duration = Number.isFinite(log?.duration)
+    ? log.duration
+    : Number.isFinite(liveDuration)
+      ? liveDuration
+      : "";
   const watchedSeconds = sumWatchedRanges(log?.watchedRanges || []);
   const watchedRatio = Number.isFinite(duration) && duration > 0
     ? Math.min(1, watchedSeconds / duration)

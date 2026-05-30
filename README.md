@@ -24,7 +24,7 @@
 - 「次へ」はブラウザ内に保存して次の動画へ移動
 - 「保存」はブラウザ内の結果をCSVとしてローカル保存。対応ブラウザではフォルダー読み込み時の動画フォルダー内に作成/更新
 - 最後の動画では「次へ」は無効化され、「保存」でCSV保存
-- CSVには未評価動画も含め、ランダム化後の提示順 `presentation_order`、視聴ログ、品質確認用flagも保存
+- CSVには未評価動画も含め、ランダム化後の提示順 `presentation_order`、視聴割合、品質確認用flagも保存
 - フォルダー内に前回保存した一致CSVがある場合、動画読み込み時に提示順と作業履歴を自動復元
 - 別フォルダーやDownloadsにあるCSVも、手動で読み込むと同じ動画フォルダーの提示順と作業履歴を復元可能
 - CSV名は動画フォルダー名をベースに自動生成。例: `my_video_folder_annotations.csv`
@@ -54,7 +54,7 @@
 
 同じ制約により、WebページはDownloads内のCSVを勝手に探して読み込むこともできません。自動再開できるのは、ユーザーが選択した動画フォルダーの中に一致CSVが含まれている場合です。
 
-品質確認用に、CSVには `watched_seconds`、`watched_ratio`、`play_seconds`、`wall_time_seconds`、`play_count`、`seek_count`、`quality_flags` を保存します。動画を再生していない場合は `no_playback`、視聴割合が低い場合は `low_watch_ratio`、実再生時間が短い場合は `low_play_time`、評価不可の場合は `unable_to_evaluate` が `quality_flags` に入ります。
+品質確認用に、CSVには `video_duration_seconds`、`watched_ratio`、`quality_flags` を保存します。`watched_ratio` は動画全体のうち実際に再生された範囲の割合です。動画を再生していない場合は `no_playback`、視聴割合が低い場合は `low_watch_ratio`、実再生時間が短い場合は `low_play_time`、評価不可の場合は `unable_to_evaluate` が `quality_flags` に入ります。
 
 ## Google Drive動画について
 
