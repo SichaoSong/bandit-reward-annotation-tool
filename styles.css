@@ -831,7 +831,7 @@ button:focus-visible {
 
 .app-shell.is-working .reason-field textarea {
   flex: 1 1 auto;
-  min-height: 120px;
+  min-height: clamp(180px, 32vh, 360px);
   max-height: none;
 }
 
@@ -841,8 +841,8 @@ button:focus-visible {
 }
 
 .app-shell.is-working .memo-field textarea {
-  min-height: 60px;
-  max-height: 84px;
+  min-height: 48px;
+  max-height: 64px;
 }
 
 .app-shell.is-working .actions {
@@ -882,6 +882,29 @@ button:focus-visible {
   margin: 0;
 }
 
+@media (max-height: 760px) and (min-width: 1181px) {
+  .app-shell.is-working {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .app-shell.is-working .layout {
+    height: auto;
+    min-height: calc(100vh - 48px);
+    overflow: visible;
+    grid-template-rows: auto minmax(560px, auto) auto;
+  }
+
+  .app-shell.is-working .workspace {
+    min-height: 560px;
+  }
+
+  .app-shell.is-working .reason-field textarea {
+    min-height: 220px;
+  }
+}
+
 @media (max-width: 1180px) {
   .layout {
     grid-template-columns: minmax(250px, 310px) minmax(420px, 1fr);
@@ -917,6 +940,10 @@ button:focus-visible {
       "actions";
     grid-template-columns: 1fr;
     grid-template-rows: auto;
+  }
+
+  .app-shell.is-working .reason-field textarea {
+    min-height: 220px;
   }
 
   .app-shell.is-working .video-stage {
