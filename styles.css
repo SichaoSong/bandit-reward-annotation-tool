@@ -670,24 +670,29 @@ button:focus-visible {
 }
 
 .app-shell.is-working .topbar {
-  min-height: 48px;
-  padding: 7px 16px;
+  min-height: 40px;
+  padding: 5px 12px;
+}
+
+.app-shell.is-working .topbar .eyebrow {
+  display: none;
 }
 
 .app-shell.is-working .topbar h1 {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .app-shell.is-working .layout {
   grid-template-areas:
     "instruction instruction side"
-    "workspace workspace side"
-    "setup setup side";
+    "workspace workspace side";
   grid-template-columns: minmax(420px, 1fr) minmax(320px, 0.68fr) minmax(220px, 0.36fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  height: calc(100vh - 48px);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  height: calc(100vh - 40px);
   min-height: 0;
   overflow: hidden;
+  padding: 8px;
 }
 
 .app-shell.is-working .left-column {
@@ -696,11 +701,11 @@ button:focus-visible {
 
 .app-shell.is-working .instruction-panel {
   grid-area: instruction;
-  padding: 10px 12px;
+  padding: 6px 8px;
 }
 
 .app-shell.is-working .instruction-panel .panel-heading {
-  margin-bottom: 8px;
+  display: none;
 }
 
 .app-shell.is-working .instruction-panel textarea {
@@ -710,45 +715,40 @@ button:focus-visible {
 .app-shell.is-working .instruction-brief {
   display: grid;
   grid-template-columns: minmax(160px, 0.8fr) minmax(300px, 1.5fr) minmax(190px, 0.9fr);
-  gap: 10px;
+  gap: 6px;
 }
 
 .instruction-brief-item {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 5px 8px;
   background: #f8fbfc;
 }
 
 .instruction-brief-item strong {
   display: block;
-  margin-bottom: 4px;
-  font-size: 13px;
+  margin-bottom: 2px;
+  font-size: 12px;
 }
 
 .instruction-brief-item p,
 .instruction-brief-item small {
   margin: 0;
   color: #334155;
-  line-height: 1.35;
-  font-size: 12px;
+  line-height: 1.25;
+  font-size: 11px;
 }
 
 .instruction-brief-item small {
   display: block;
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--muted);
   font-weight: 800;
 }
 
 .app-shell.is-working .setup-panel {
-  grid-area: setup;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  display: none;
 }
 
 .app-shell.is-working .setup-panel .panel-heading {
@@ -780,7 +780,7 @@ button:focus-visible {
   grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
   grid-template-rows: minmax(0, 1fr) auto auto;
   align-items: stretch;
-  gap: 8px;
+  gap: 6px;
   min-height: 0;
 }
 
@@ -794,12 +794,12 @@ button:focus-visible {
 
 .app-shell.is-working .playback-controls {
   grid-area: controls;
-  min-height: 44px;
+  min-height: 38px;
 }
 
 .app-shell.is-working .video-meta {
   grid-area: meta;
-  min-height: 44px;
+  min-height: 36px;
 }
 
 .app-shell.is-working .annotation-panel {
@@ -807,19 +807,20 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  padding: 10px;
 }
 
 .app-shell.is-working .rating-group {
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
 .app-shell.is-working .rating-button {
-  min-height: 38px;
+  min-height: 32px;
 }
 
 .app-shell.is-working .unavailable-control {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .app-shell.is-working .reason-field {
@@ -831,23 +832,31 @@ button:focus-visible {
 
 .app-shell.is-working .reason-field textarea {
   flex: 1 1 auto;
-  min-height: clamp(180px, 32vh, 360px);
+  min-height: clamp(150px, 26vh, 280px);
   max-height: none;
+  padding: 8px;
+  line-height: 1.4;
 }
 
 .app-shell.is-working .memo-field {
   flex: 0 0 auto;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .app-shell.is-working .memo-field textarea {
-  min-height: 48px;
-  max-height: 64px;
+  min-height: 42px;
+  max-height: 52px;
+  padding: 8px;
+  line-height: 1.35;
 }
 
 .app-shell.is-working .actions {
   grid-area: actions;
   align-self: stretch;
+}
+
+.app-shell.is-working .actions button {
+  min-height: 34px;
 }
 
 .app-shell.is-working .right-column {
@@ -883,25 +892,16 @@ button:focus-visible {
 }
 
 @media (max-height: 760px) and (min-width: 1181px) {
-  .app-shell.is-working {
-    height: auto;
-    min-height: 100vh;
-    overflow: auto;
-  }
-
-  .app-shell.is-working .layout {
-    height: auto;
-    min-height: calc(100vh - 48px);
-    overflow: visible;
-    grid-template-rows: auto minmax(560px, auto) auto;
-  }
-
-  .app-shell.is-working .workspace {
-    min-height: 560px;
-  }
-
   .app-shell.is-working .reason-field textarea {
-    min-height: 220px;
+    min-height: 140px;
+  }
+
+  .app-shell.is-working .instruction-brief-item small {
+    display: none;
+  }
+
+  .app-shell.is-working .video-meta {
+    min-height: 30px;
   }
 }
 
